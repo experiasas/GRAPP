@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import CuentaCobro, InvitacionRadicacion
+from terceros.models import Tercero
 
 # Register your models here.
 @admin.register(CuentaCobro)
@@ -22,3 +23,17 @@ class InvitacionRadicacionAdmin(admin.ModelAdmin):
         (None, {"fields": ("empresa", "proveedor", "email", "estado")}),
         ("Acceso", {"fields": ("token", "created_at", "used_at")}),
     )
+
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "proveedor":
+            kwargs["queryset"] = (
+                Tercero.objects
+                .filter(
+                    estado=Tercero.Estado.APROBADO,
+                    tipos__code__in=["PROVEEDOR", "CONTRATISTA"],
+                )
+                .distinct()
+                .order_by("razon_social", "nombre1", "apellido1")
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)

@@ -147,6 +147,11 @@ class TerceroTipo(models.Model):
 
     class Meta:
         unique_together = ("tercero", "tipo")
+        verbose_name = "Tipo de Tercero"
+        verbose_name_plural = "Tipos de Terceros"
+
+    def __str__(self):
+        return f"{self.tercero} - {self.tipo}"
 
 
 # -------------------------
@@ -166,7 +171,7 @@ class DocumentoTipo(models.Model):
 
 class DocumentoRequerido(models.Model):
     """
-    Define qué DocumentoTipo es requerido/obligatorio para cada TipoTercero.
+   
     Ej: Cliente requiere RUT, Cámara y Comercio, Cédula RL, EEFF, DOF, NDA, Tratamiento.
         Proveedor requiere RUT, Cámara y Comercio, Cédula RL, Certificación Bancaria, NDA, Tratamiento.
     """
