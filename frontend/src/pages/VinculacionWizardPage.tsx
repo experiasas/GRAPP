@@ -1,0 +1,386 @@
+import { useState, useEffect, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Building2, Loader2, AlertCircle, User, FileText, Briefcase, Check } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { vinculacionAPI, terceroAPI } from '@/lib/api';
+import { DocumentoRequerido } from '@/components/forms/DocumentosRequeridos';
+
+// Tab Components
+import DatosBasicosTab from '@/components/wizard/DatosBasicosTab';
+import DocumentosTab from '@/components/wizard/DocumentosTab';
+import PerfilTab from '@/components/wizard/PerfilTab';
+
+// Tipo de datos de la invitación
+interface InvitacionData {
+    email: string;
+    empresa: {
+        id: number;
+        nombre: string;
+    };
+    tipo_tercero: {
+        code: string;
+        nombre: string;
+    };
+    documentos_requeridos?: DocumentoRequerido[];
+}
+
+// Tipo para status de completitud
+interface TerceroStatus {
+    tercero_id: number;
+    estado: string;
+    requiere_perfil: boolean;
+    documentos: {
+        completo: boolean;
+        items: any[];
+    };
+    perfil: {
+        completo: boolean;
+        secciones: any;
+    };
+    puede_enviar_aprobacion: boolean;
+}
+
+const VinculacionWizardPage = () => {
+    const { token } = useParams<{ token: string }>();
+    const navigate = useNavigate();
+
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [invitacionData, setInvitacionData] = useState<InvitacionData | null>(null);
+    const [terceroId, setTerceroId] = useState<number | null>(null);
+    const [activeTab, setActiveTab] = useState('datos-basicos');
+    const [status, setStatus] = useState<TerceroStatus | null>(null);
+    const [statusLoading, setStatusLoading] = useState(false);
+
+    // Cargar datos de la invitación
+    useEffect(() => {
+        const loadInvitacion = async () => {
+            if (!token) {
+                setError('Token no válido');
+                setLoading(false);
+                return;
+            }
+
+            try {
+                const data = await vinculacionAPI.getInvitacion(token);
+                setInvitacionData(data);
+            } catch (err: any) {
+                setError(err.message || 'Error al cargar la invitación');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadInvitacion();
+    }, [token]);
+
+    // Refrescar status de completitud
+    const refreshStatus = async () => {
+        if (!terceroId) return;
+
+        setStatusLoading(true);
+        try {
+            const data = await terceroAPI.getStatus(terceroId);
+            setStatus(data);
+        } catch (error) {
+            console.error('Error fetching status:', error);
+        } finally {
+            setStatusLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (terceroId) {
+            refreshStatus();
+        }
+    }, [terceroId]);
+
+    // Determinar tabs según tipo de tercero
+    const tabs = useMemo(() => {
+        const baseTabs = [
+            { id: 'datos-basicos', label: 'Datos Básicos', icon: User },
+            { id: 'documentos', label: 'Documentos', icon: FileText }
+        ];
+
+        if (!invitacionData) return baseTabs;
+
+        const requiresPerfil = ['CONTRATISTA', 'EMPLEADO', 'ASPIRANTE', 'SOCIO'].includes(
+            invitacionData.tipo_tercero.code
+        );
+
+        if (requiresPerfil) {
+            baseTabs.push({ id: 'perfil', label: 'Información Adicional', icon: Briefcase });
+        }
+
+        return baseTabs;
+    }, [invitacionData]);
+
+    // Handler para cuando se crea el tercero
+    const handleTerceroCreated = (id: number) => {
+        setTerceroId(id);
+        setActiveTab('documentos');
+    };
+
+    // Handler para enviar a aprobación
+    const handleSubmitForApproval = async () => {
+        if (!terceroId || !status?.puede_enviar_aprobacion) return;
+
+        try {
+            navigate('/success/vinculacion', {
+                state: {
+                    message: 'Su solicitud ha sido enviada para aprobación'
+                }
+            });
+        } catch (error) {
+            console.error('Error al enviar para aprobación:', error);
+        }
+    };
+
+    // Verificar si un tab está completado
+    const isTabCompleted = (tabId: string) => {
+        if (!terceroId) return false;
+        if (tabId === 'datos-basicos') return true;
+        if (tabId === 'documentos') return status?.documentos.completo || false;
+        if (tabId === 'perfil') return status?.perfil.completo || false;
+        return false;
+    };
+
+    // Pantalla de carga
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="text-center">
+                    <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
+                    <p className="text-muted-foreground">Cargando invitación...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // Pantalla de error
+    if (error || !invitacionData) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="max-w-md w-full mx-4">
+                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                        <AlertCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
+                        <h2 className="text-2xl font-bold text-foreground mb-2">
+                            {error === 'Enlace inválido o expirado' ? 'Enlace Inválido' : 'Error'}
+                        </h2>
+                        <p className="text-muted-foreground mb-6">
+                            {error || 'No se pudo cargar la invitación'}
+                        </p>
+                        <button
+                            onClick={() => navigate('/')}
+                            className="bg-primary text-primary-foreground px-6 py-2 rounded-lg hover:opacity-90"
+                        >
+                            Volver al inicio
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Wizard principal
+    return (
+        <div className="min-h-screen bg-background">
+            {/* Header - Idéntico a VinculacionPage */}
+            <header className="border-b border-border bg-card sticky top-0 z-10">
+                <div className="container mx-auto px-4 py-4">
+                    <div className="flex items-center justify-between">
+                        <button
+                            onClick={() => navigate('/')}
+                            className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                        >
+                            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+                                <Building2 className="w-5 h-5 text-primary-foreground" />
+                            </div>
+                            <span className="text-xl font-semibold text-foreground">GRAPP</span>
+                        </button>
+                        <span className="text-sm text-muted-foreground">
+                            Vinculación de Terceros
+                        </span>
+                    </div>
+                </div>
+            </header>
+
+            {/* Main - max-w-3xl como VinculacionPage */}
+            <main className="container mx-auto px-4 py-8 max-w-3xl">
+                {/* Header info - Idéntico a VinculacionPage */}
+                <div className="mb-8">
+                    <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
+                        Vinculación de Terceros
+                    </h1>
+                    <p className="text-muted-foreground">
+                        Complete el formulario para registrarse como {invitacionData.tipo_tercero.nombre.toLowerCase()} en {invitacionData.empresa.nombre}
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                        Invitación para: <strong>{invitacionData.email}</strong>
+                    </p>
+                </div>
+
+                {/* Wizard Tabs - Diseño limpio tipo steps */}
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                    {/* Tab List - Clean step indicators */}
+                    <TabsList className="w-full h-auto p-1 bg-muted/50 rounded-lg border border-border mb-6">
+                        <div className="grid w-full" style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
+                            {tabs.map((tab, index) => {
+                                const isDisabled = !terceroId && tab.id !== 'datos-basicos';
+                                const isCompleted = isTabCompleted(tab.id);
+                                const isActive = activeTab === tab.id;
+
+                                return (
+                                    <TabsTrigger
+                                        key={tab.id}
+                                        value={tab.id}
+                                        disabled={isDisabled}
+                                        className={`
+                                            relative py-2.5 px-3 text-sm font-medium rounded-md transition-all
+                                            inline-flex items-center justify-center gap-2
+                                            ${isActive
+                                                ? 'bg-background text-foreground shadow-sm border border-border'
+                                                : 'text-muted-foreground hover:text-foreground'
+                                            }
+                                            ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}
+                                            data-[state=active]:bg-background
+                                            data-[state=active]:text-foreground
+                                            data-[state=active]:shadow-sm
+                                        `}
+                                    >
+                                        {/* Step number or check */}
+                                        {isCompleted ? (
+                                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+                                                <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                            </span>
+                                        ) : (
+                                            <span className={`
+                                                inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-semibold
+                                                ${isActive
+                                                    ? 'bg-primary text-primary-foreground'
+                                                    : 'bg-muted text-muted-foreground'
+                                                }
+                                            `}>
+                                                {index + 1}
+                                            </span>
+                                        )}
+                                        <span className="hidden sm:inline">{tab.label}</span>
+                                    </TabsTrigger>
+                                );
+                            })}
+                        </div>
+                    </TabsList>
+
+                    {/* Tab Content - Cards con rounded-xl */}
+                    <TabsContent value="datos-basicos" className="mt-0">
+                        <div className="bg-card border border-border rounded-xl">
+                            <DatosBasicosTab
+                                token={token!}
+                                onTerceroCreated={handleTerceroCreated}
+                            />
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="documentos" className="mt-0">
+                        {terceroId ? (
+                            <div className="bg-card border border-border rounded-xl">
+                                <DocumentosTab
+                                    terceroId={terceroId}
+                                    documentosRequeridos={invitacionData.documentos_requeridos || []}
+                                    onComplete={refreshStatus}
+                                />
+                            </div>
+                        ) : (
+                            <div className="bg-card border border-border rounded-xl p-8 text-center">
+                                <p className="text-muted-foreground">
+                                    Complete primero los datos básicos para continuar.
+                                </p>
+                            </div>
+                        )}
+                    </TabsContent>
+
+                    {tabs.find(t => t.id === 'perfil') && (
+                        <TabsContent value="perfil" className="mt-0">
+                            {terceroId ? (
+                                <PerfilTab
+                                    terceroId={terceroId}
+                                    tipoTercero={invitacionData.tipo_tercero.code}
+                                    onUpdate={refreshStatus}
+                                />
+                            ) : (
+                                <div className="bg-card border border-border rounded-xl p-8 text-center">
+                                    <p className="text-muted-foreground">
+                                        Complete primero los datos básicos para continuar.
+                                    </p>
+                                </div>
+                            )}
+                        </TabsContent>
+                    )}
+                </Tabs>
+
+                {/* Footer - Diseño minimalista */}
+                {terceroId && (
+                    <div className="mt-6 bg-card border border-border rounded-xl p-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            {/* Status indicators - Mínimo y limpio */}
+                            <div className="flex items-center gap-4 text-sm">
+                                {statusLoading ? (
+                                    <div className="inline-flex items-center gap-2 text-muted-foreground">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <span>Verificando...</span>
+                                    </div>
+                                ) : status ? (
+                                    <>
+                                        <div className="inline-flex items-center gap-1.5">
+                                            <span className="text-muted-foreground">Documentos:</span>
+                                            {status.documentos.completo ? (
+                                                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                                                    <Check className="w-3.5 h-3.5" />
+                                                    <span>Listo</span>
+                                                </span>
+                                            ) : (
+                                                <span className="text-amber-600 dark:text-amber-400">Pendiente</span>
+                                            )}
+                                        </div>
+                                        {status.requiere_perfil && (
+                                            <div className="inline-flex items-center gap-1.5">
+                                                <span className="text-muted-foreground">Perfil:</span>
+                                                {status.perfil.completo ? (
+                                                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                                                        <Check className="w-3.5 h-3.5" />
+                                                        <span>Listo</span>
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-amber-600 dark:text-amber-400">Pendiente</span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <button
+                                        onClick={refreshStatus}
+                                        className="text-sm text-primary hover:underline"
+                                    >
+                                        Verificar estado
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Submit button */}
+                            <Button
+                                disabled={!status?.puede_enviar_aprobacion}
+                                onClick={handleSubmitForApproval}
+                                className="w-full sm:w-auto"
+                            >
+                                Enviar para Aprobación
+                            </Button>
+                        </div>
+                    </div>
+                )}
+            </main>
+        </div>
+    );
+};
+
+export default VinculacionWizardPage;

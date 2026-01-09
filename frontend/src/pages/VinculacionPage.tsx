@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Building2, Loader2, AlertCircle } from 'lucide-react';
 import { VinculacionTercerosForm } from '@/components/forms/VinculacionTercerosForm';
 import { vinculacionAPI } from '@/lib/api';
+import { DocumentoRequerido } from '@/components/forms/DocumentosRequeridos';
 
 interface InvitacionData {
     email: string;
@@ -14,6 +15,7 @@ interface InvitacionData {
         code: string;
         nombre: string;
     };
+    documentos_requeridos?: DocumentoRequerido[];
 }
 
 const VinculacionPage = () => {
@@ -23,6 +25,8 @@ const VinculacionPage = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [invitacionData, setInvitacionData] = useState<InvitacionData | null>(null);
+    const [uploadProgress, setUploadProgress] = useState<Record<string, 'uploading' | 'success' | 'error'>>({});
+    const [isUploading, setIsUploading] = useState(false);
 
     // Cargar datos de la invitación al montar
     useEffect(() => {
@@ -46,11 +50,27 @@ const VinculacionPage = () => {
         loadInvitacion();
     }, [token]);
 
-    const handleSubmit = async (formData: any) => {
+    const handleSubmit = async (formData: any, documentFiles: Record<string, File>) => {
         if (!token) return;
 
         try {
-            await vinculacionAPI.submitTercero(token, formData);
+            // Step 1: Create tercero and get ID
+            const response = await vinculacionAPI.submitTercero(token, formData);
+            const terceroId = response.tercero_id;
+
+            // Step 2: Upload documents in parallel if there are any
+            if (Object.keys(documentFiles).length > 0) {
+                setIsUploading(true);
+
+                await vinculacionAPI.uploadDocumentosParallel(
+                    terceroId,
+                    documentFiles,
+                    3, // Concurrency limit: 3 files at a time
+                    (code, status) => {
+                        setUploadProgress(prev => ({ ...prev, [code]: status }));
+                    }
+                );
+            }
 
             // Redirigir a success con datos
             const nombre = formData.tipo_persona === 'JURIDICA'
@@ -69,6 +89,9 @@ const VinculacionPage = () => {
         } catch (err: any) {
             // Los errores de validación se manejan en el formulario
             console.error('Error al enviar:', err);
+            setError('Error al procesar la solicitud. Por favor intente nuevamente.');
+        } finally {
+            setIsUploading(false);
         }
     };
 
@@ -144,7 +167,24 @@ const VinculacionPage = () => {
                     </p>
                 </div>
 
+                {/* Upload Progress Indicator */}
+                {isUploading && (
+                    <div className="mb-6 p-4 bg-primary/10 border border-primary rounded-lg">
+                        <div className="flex items-center gap-3">
+                            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                            <div>
+                                <p className="font-medium text-foreground">Subiendo documentos...</p>
+                                <p className="text-sm text-muted-foreground">
+                                    {Object.values(uploadProgress).filter(s => s === 'success').length} de{' '}
+                                    {Object.keys(uploadProgress).length} archivos completados
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <VinculacionTercerosForm
+                    documentosRequeridos={invitacionData.documentos_requeridos || []}
                     onSuccess={handleSubmit}
                 />
             </main>

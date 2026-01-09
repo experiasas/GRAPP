@@ -129,6 +129,138 @@ class Tercero(models.Model):
 
     class Meta:
         unique_together = ("empresa", "tipo_doc", "documento")
+    
+    # ========================================
+    # Métodos de Completitud para Wizard
+    # ========================================
+    
+    def get_documentos_status(self):
+        """
+        Retorna el estado de documentos requeridos para este tercero.
+        """
+        from .models import DocumentoRequerido
+        
+        # Obtener todos los tipos asignados a este tercero
+        tipos_asignados = self.tipos.all()
+        if not tipos_asignados.exists():
+            return []
+        
+        # Documentos requeridos para los tipos asignados
+        requeridos = DocumentoRequerido.objects.filter(
+            tipo_tercero__in=tipos_asignados
+        ).select_related('documento_tipo').distinct()
+        
+        docs_estado = []
+        for req in requeridos:
+            doc = self.documentos.filter(documento_tipo=req.documento_tipo).first()
+            docs_estado.append({
+                'code': req.documento_tipo.code,
+                'nombre': req.documento_tipo.nombre,
+                'obligatorio': req.obligatorio,
+                'estado': doc.estado if doc else 'PENDIENTE',
+                'cargado': bool(doc and doc.archivo)
+            })
+        
+        return docs_estado
+    
+    def get_perfil_status(self):
+        """
+        Retorna completitud de secciones de perfil según tipo de tercero.
+        """
+        tipo_codes = list(self.tipos.values_list('code', flat=True))
+        
+        # Determinar qué secciones aplican según tipo
+        requiere_perfil_completo = any(
+            code in ['CONTRATISTA', 'EMPLEADO', 'ASPIRANTE'] 
+            for code in tipo_codes
+        )
+        
+        requiere_idiomas = any(
+            code in ['CONTRATISTA', 'EMPLEADO', 'ASPIRANTE', 'SOCIO']
+            for code in tipo_codes
+        )
+        
+        perfil = {}
+        
+        if requiere_perfil_completo:
+            perfil['estudios'] = {
+                'count': self.estudios.count(),
+                'completo': self.estudios.count() >= 1  # al menos 1 estudio
+            }
+            perfil['cursos'] = {
+                'count': self.cursos.count(),
+                'completo': True  # opcional
+            }
+            perfil['certificaciones'] = {
+                'count': self.certificaciones.count(),
+                'completo': True  # opcional
+            }
+            perfil['experiencias'] = {
+                'count': self.experiencias.count(),
+                'completo': self.experiencias.count() >= 0  # opcional
+            }
+            perfil['seguridad_social'] = {
+                'completo': hasattr(self, 'seguridad_social')
+            }
+        
+        if requiere_idiomas:
+            perfil['idiomas'] = {
+                'count': self.idiomas.count(),
+                'completo': self.idiomas.count() >= 1  # al menos 1 idioma
+            }
+        
+        return perfil
+    
+    def is_documentos_completo(self):
+        """
+        Verifica si todos los documentos obligatorios están cargados.
+        """
+        from .models import DocumentoRequerido
+        
+        tipos_asignados = self.tipos.all()
+        if not tipos_asignados.exists():
+            return False
+        
+        requeridos = DocumentoRequerido.objects.filter(
+            tipo_tercero__in=tipos_asignados,
+            obligatorio=True
+        ).distinct()
+       
+        for req in requeridos:
+            doc = self.documentos.filter(
+                documento_tipo=req.documento_tipo
+            ).first()
+            
+            # Documento debe existir, tener archivo y estar cargado
+            if not doc or doc.estado != 'CARGADO' or not doc.archivo:
+                return False
+        
+        return True
+    
+    def is_perfil_completo(self):
+        """
+        Verifica si el perfil está completo según tipo de tercero.
+        """
+        perfil = self.get_perfil_status()
+        
+        # Si no requiere perfil adicional, está completo
+        if not perfil:
+            return True
+        
+        # Verificar cada sección requerida
+        for seccion, data in perfil.items():
+            if not data.get('completo', True):
+                return False
+        
+        return True
+    
+    def can_submit_for_approval(self):
+        """
+        Verifica si está listo para enviar a aprobación.
+        """
+        return self.is_documentos_completo() and self.is_perfil_completo()
+    
+    # ========================================
 
     def __str__(self):
         return self.nombre_mostrar()

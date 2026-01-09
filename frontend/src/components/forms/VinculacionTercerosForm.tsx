@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -22,6 +22,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { DocumentosRequeridos, DocumentoRequerido } from "@/components/forms/DocumentosRequeridos";
 
 const tiposDocumento = [
   { value: "CC", label: "Cédula de Ciudadanía" },
@@ -57,11 +58,14 @@ const formSchema = z.object({
 type FormData = z.infer<typeof formSchema>;
 
 interface VinculacionTercerosFormProps {
-  onSuccess: (data: FormData) => void;
+  documentosRequeridos?: DocumentoRequerido[];
+  onSuccess: (data: FormData, files: Record<string, File>) => void;
 }
 
-export function VinculacionTercerosForm({ onSuccess }: VinculacionTercerosFormProps) {
+export function VinculacionTercerosForm({ documentosRequeridos = [], onSuccess }: VinculacionTercerosFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [documentFiles, setDocumentFiles] = useState<Record<string, File>>({});
+  const [validationError, setValidationError] = useState<string>("");
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -83,12 +87,32 @@ export function VinculacionTercerosForm({ onSuccess }: VinculacionTercerosFormPr
 
   const tipoPersona = form.watch("tipo_persona");
 
+  useEffect(() => {
+    form.setValue("tipo_doc", "");
+  }, [tipoPersona, form]);
+
   const onSubmit = async (data: FormData) => {
+    // Validar documentos obligatorios
+    const obligatorios = documentosRequeridos.filter(d => d.obligatorio);
+    const faltantes = obligatorios.filter(
+      doc => !documentFiles[doc.documento_tipo_code]
+    );
+
+    if (faltantes.length > 0) {
+      setValidationError(
+        `Faltan documentos obligatorios: ${faltantes.map(d => d.documento_tipo_nombre).join(', ')}`
+      );
+      return;
+    }
+
+    setValidationError("");
     setIsSubmitting(true);
-    // Simular envío
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsSubmitting(false);
-    onSuccess(data);
+
+    try {
+      await onSuccess(data, documentFiles);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -119,16 +143,14 @@ export function VinculacionTercerosForm({ onSuccess }: VinculacionTercerosFormPr
                   >
                     <Label
                       htmlFor="natural"
-                      className={`flex items-center gap-4 p-5 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
-                        field.value === "NATURAL"
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50 hover:bg-secondary/50"
-                      }`}
+                      className={`flex items-center gap-4 p-5 rounded-xl border-2 cursor-pointer transition-all duration-200 ${field.value === "NATURAL"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50 hover:bg-secondary/50"
+                        }`}
                     >
                       <RadioGroupItem value="NATURAL" id="natural" className="sr-only" />
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
-                        field.value === "NATURAL" ? "bg-primary text-primary-foreground" : "bg-secondary"
-                      }`}>
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${field.value === "NATURAL" ? "bg-primary text-primary-foreground" : "bg-secondary"
+                        }`}>
                         <User className="w-6 h-6" />
                       </div>
                       <div>
@@ -139,16 +161,14 @@ export function VinculacionTercerosForm({ onSuccess }: VinculacionTercerosFormPr
 
                     <Label
                       htmlFor="juridica"
-                      className={`flex items-center gap-4 p-5 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
-                        field.value === "JURIDICA"
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50 hover:bg-secondary/50"
-                      }`}
+                      className={`flex items-center gap-4 p-5 rounded-xl border-2 cursor-pointer transition-all duration-200 ${field.value === "JURIDICA"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50 hover:bg-secondary/50"
+                        }`}
                     >
                       <RadioGroupItem value="JURIDICA" id="juridica" className="sr-only" />
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
-                        field.value === "JURIDICA" ? "bg-primary text-primary-foreground" : "bg-secondary"
-                      }`}>
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${field.value === "JURIDICA" ? "bg-primary text-primary-foreground" : "bg-secondary"
+                        }`}>
                         <Building2 className="w-6 h-6" />
                       </div>
                       <div>
@@ -189,11 +209,18 @@ export function VinculacionTercerosForm({ onSuccess }: VinculacionTercerosFormPr
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {tiposDocumento.map((tipo) => (
-                        <SelectItem key={tipo.value} value={tipo.value}>
-                          {tipo.label}
-                        </SelectItem>
-                      ))}
+                      {tiposDocumento
+                        .filter((tipo) => {
+                          if (tipoPersona === "JURIDICA") {
+                            return tipo.value === "NIT";
+                          }
+                          return tipo.value !== "NIT";
+                        })
+                        .map((tipo) => (
+                          <SelectItem key={tipo.value} value={tipo.value}>
+                            {tipo.label}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -388,6 +415,21 @@ export function VinculacionTercerosForm({ onSuccess }: VinculacionTercerosFormPr
             />
           </div>
         </div>
+
+        {/* Sección: Documentos Requeridos */}
+        {documentosRequeridos.length > 0 && (
+          <DocumentosRequeridos
+            documentos={documentosRequeridos}
+            onChange={setDocumentFiles}
+          />
+        )}
+
+        {/* Validation Error */}
+        {validationError && (
+          <div className="p-4 bg-destructive/10 border border-destructive rounded-lg">
+            <p className="text-sm text-destructive font-medium">{validationError}</p>
+          </div>
+        )}
 
         {/* Botón de envío */}
         <div className="flex justify-end pt-4">
