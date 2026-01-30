@@ -123,6 +123,9 @@ class Tercero(models.Model):
 
     # Tipos asignados (cliente/proveedor/...)
     tipos = models.ManyToManyField(TipoTercero, through="TerceroTipo", related_name="terceros")
+    
+    # Tags para búsqueda y categorización
+    tags = models.ManyToManyField('Tag', blank=True, related_name='terceros')
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -136,18 +139,24 @@ class Tercero(models.Model):
     
     def get_documentos_status(self):
         """
-        Retorna el estado de documentos requeridos para este tercero.
+        Retorna el estado de documentos requeridos para este tercero,
+        filtrados por tipo_persona.
         """
         from .models import DocumentoRequerido
+        from django.db.models import Q
         
         # Obtener todos los tipos asignados a este tercero
         tipos_asignados = self.tipos.all()
         if not tipos_asignados.exists():
             return []
         
-        # Documentos requeridos para los tipos asignados
+        # Filtrar documentos por tipo_tercero Y tipo_persona
+        # Incluir documentos que aplican a AMBAS o al tipo_persona específico
         requeridos = DocumentoRequerido.objects.filter(
             tipo_tercero__in=tipos_asignados
+        ).filter(
+            Q(aplica_a_persona=DocumentoRequerido.AplicaPersona.AMBAS) |
+            Q(aplica_a_persona=self.tipo_persona)
         ).select_related('documento_tipo').distinct()
         
         docs_estado = []
@@ -213,17 +222,23 @@ class Tercero(models.Model):
     
     def is_documentos_completo(self):
         """
-        Verifica si todos los documentos obligatorios están cargados.
+        Verifica si todos los documentos obligatorios están cargados,
+        filtrados por tipo_persona.
         """
         from .models import DocumentoRequerido
+        from django.db.models import Q
         
         tipos_asignados = self.tipos.all()
         if not tipos_asignados.exists():
             return False
         
+        # Filtrar documentos obligatorios por tipo_persona
         requeridos = DocumentoRequerido.objects.filter(
             tipo_tercero__in=tipos_asignados,
             obligatorio=True
+        ).filter(
+            Q(aplica_a_persona=DocumentoRequerido.AplicaPersona.AMBAS) |
+            Q(aplica_a_persona=self.tipo_persona)
         ).distinct()
        
         for req in requeridos:
@@ -303,16 +318,35 @@ class DocumentoTipo(models.Model):
 
 class DocumentoRequerido(models.Model):
     """
-   
+    Documentos requeridos por tipo de tercero y tipo de persona.
+    
     Ej: Cliente requiere RUT, Cámara y Comercio, Cédula RL, EEFF, DOF, NDA, Tratamiento.
         Proveedor requiere RUT, Cámara y Comercio, Cédula RL, Certificación Bancaria, NDA, Tratamiento.
+    
+    El campo aplica_a_persona permite filtrar documentos según si el tercero es
+    persona natural o jurídica.
     """
+    class AplicaPersona(models.TextChoices):
+        AMBAS = "AMBAS", "Ambas"
+        NATURAL = "NATURAL", "Persona natural"
+        JURIDICA = "JURIDICA", "Persona jurídica"
+    
     tipo_tercero = models.ForeignKey(TipoTercero, on_delete=models.CASCADE, related_name="documentos_requeridos")
     documento_tipo = models.ForeignKey(DocumentoTipo, on_delete=models.PROTECT)
     obligatorio = models.BooleanField(default=True)
+    aplica_a_persona = models.CharField(
+        max_length=20,
+        choices=AplicaPersona.choices,
+        default=AplicaPersona.AMBAS,
+        help_text="Indica si este documento aplica a personas naturales, jurídicas o ambas"
+    )
 
     class Meta:
-        unique_together = ("tipo_tercero", "documento_tipo")
+        unique_together = ("tipo_tercero", "documento_tipo", "aplica_a_persona")
+
+    def __str__(self):
+        return f"{self.tipo_tercero} - {self.documento_tipo} - {self.aplica_a_persona}"
+
 
 
 class DocumentoTercero(models.Model):
@@ -429,7 +463,43 @@ class SeguridadSocial(models.Model):
 
 
 # -------------------------
-# 5) Actualización de datos con código + aprobación
+# 5) Tags para categorización y búsqueda
+# -------------------------
+class Tag(models.Model):
+    """
+    Tags para categorizar terceros (tecnologia, biomedico, cctv, etc).
+    Los nombres se normalizan automáticamente (lowercase, trim).
+    """
+    nombre = models.CharField(max_length=50, unique=True, db_index=True)
+    slug = models.SlugField(max_length=50, unique=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['nombre']
+    
+    def save(self, *args, **kwargs):
+        # Normalizar nombre: lowercase y trim
+        if self.nombre:
+            self.nombre = self.nombre.strip().lower()
+        
+        # Generar slug si no existe
+        if not self.slug:
+            from django.utils.text import slugify
+            self.slug = slugify(self.nombre)
+        
+        super().save(*args, **kwargs)
+    
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.nombre and len(self.nombre.strip()) < 2:
+            raise ValidationError('El tag debe tener al menos 2 caracteres')
+    
+    def __str__(self):
+        return self.nombre
+
+
+# -------------------------
+# 6) Actualización de datos con código + aprobación
 # -------------------------
 class SolicitudActualizacionTercero(models.Model):
     class Estado(models.TextChoices):

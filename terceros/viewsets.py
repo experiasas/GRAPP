@@ -179,3 +179,106 @@ class IdiomaListView(APIView):
         idiomas = Idioma.objects.all().order_by('nombre')
         serializer = IdiomaSerializer(idiomas, many=True)
         return Response(serializer.data)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class TerceroTagsView(APIView):
+    """
+    GET/PUT/POST /api/terceros/<tercero_id>/tags/
+    Manages tags for a tercero
+    """
+    
+    def get(self, request, tercero_id):
+        """Returns list of tag names for this tercero"""
+        from .models import Tercero, Tag
+        
+        tercero = get_object_or_404(Tercero, id=tercero_id)
+        tags = tercero.tags.all().order_by('nombre')
+        tag_names = [tag.nombre for tag in tags]
+        
+        return Response({'tags': tag_names})
+    
+    def put(self, request, tercero_id):
+        """Replaces all tags for this tercero"""
+        from .models import Tercero, Tag
+        from django.core.exceptions import ValidationError
+        
+        tercero = get_object_or_404(Tercero, id=tercero_id)
+        tag_names = request.data.get('tags', [])
+        
+        if not isinstance(tag_names, list):
+            return Response(
+                {'error': 'tags debe ser una lista de strings'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Normalizar y validar tags
+        normalized_tags = []
+        for name in tag_names:
+            if not isinstance(name, str):
+                continue
+            
+            normalized = name.strip().lower()
+            if len(normalized) < 2:
+                return Response(
+                    {'error': f'Tag "{name}" debe tener al menos 2 caracteres'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            normalized_tags.append(normalized)
+        
+        # Crear/obtener tags y asociar
+        tag_objects = []
+        for tag_name in normalized_tags:
+            tag, created = Tag.objects.get_or_create(nombre=tag_name)
+            tag_objects.append(tag)
+        
+        # Reemplazar tags (clear + set)
+        tercero.tags.set(tag_objects)
+        
+        return Response({
+            'tags': [tag.nombre for tag in tag_objects],
+            'message': 'Tags actualizados exitosamente'
+        })
+    
+    def post(self, request, tercero_id):
+        """Adds tags without removing existing ones"""
+        from .models import Tercero, Tag
+        
+        tercero = get_object_or_404(Tercero, id=tercero_id)
+        tag_names = request.data.get('tags', [])
+        
+        if not isinstance(tag_names, list):
+            return Response(
+                {'error': 'tags debe ser una lista de strings'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Normalizar y validar tags
+        normalized_tags = []
+        for name in tag_names:
+            if not isinstance(name, str):
+                continue
+            
+            normalized = name.strip().lower()
+            if len(normalized) < 2:
+                return Response(
+                    {'error': f'Tag "{name}" debe tener al menos 2 caracteres'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            normalized_tags.append(normalized)
+        
+        # Crear/obtener tags y añadir (sin borrar existentes)
+        tag_objects = []
+        for tag_name in normalized_tags:
+            tag, created = Tag.objects.get_or_create(nombre=tag_name)
+            tag_objects.append(tag)
+        
+        tercero.tags.add(*tag_objects)
+        
+        # Retornar todos los tags actuales
+        all_tags = tercero.tags.all().order_by('nombre')
+        
+        return Response({
+            'tags': [tag.nombre for tag in all_tags],
+            'message': f'{len(tag_objects)} tags añadidos'
+        })

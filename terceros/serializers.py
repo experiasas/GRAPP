@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import (
     InvitacionVinculacion, Tercero, TipoTercero, DocumentoRequerido,
     Estudio, Curso, Certificacion, ExperienciaLaboral,
-    Idioma, TerceroIdioma, SeguridadSocial
+    Idioma, TerceroIdioma, SeguridadSocial, Tag
 )
 from tenancy.models import Empresa
 
@@ -26,7 +26,7 @@ class DocumentoRequeridoSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = DocumentoRequerido
-        fields = ['documento_tipo_code', 'documento_tipo_nombre', 'obligatorio']
+        fields = ['documento_tipo_code', 'documento_tipo_nombre', 'obligatorio', 'aplica_a_persona']
 
 
 class InvitacionVinculacionSerializer(serializers.ModelSerializer):
@@ -162,3 +162,16 @@ class SeguridadSocialSerializer(serializers.ModelSerializer):
         model = SeguridadSocial
         fields = ['eps', 'arl', 'afp', 'soporte', 'updated_at']
         read_only_fields = ['updated_at']
+
+
+# ========================================
+# Serializers para Tags System
+# ========================================
+
+class TagSerializer(serializers.ModelSerializer):
+    """Serializer for Tag model"""
+    
+    class Meta:
+        model = Tag
+        fields = ['nombre', 'slug', 'created_at']
+        read_only_fields = ['slug', 'created_at']

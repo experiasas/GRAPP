@@ -38,6 +38,17 @@ export const vinculacionAPI = {
         return data;
     },
 
+    getDocumentosRequeridosFiltrados: async (
+        token: string,
+        tipoPersona: "NATURAL" | "JURIDICA"
+    ) => {
+        const { data } = await apiClient.get(
+            `/api/vinculacion/${token}/documentos/`, 
+            { params: { tipo_persona: tipoPersona } } //  axios arma el querystring
+        );
+        return data;
+    },
+
     uploadDocumento: async (terceroId: number, tipoCode: string, file: File) => {
         const formData = new FormData();
         formData.append('archivo', file);
@@ -97,6 +108,12 @@ export const vinculacionAPI = {
 // API para perfil de terceros (Wizard)
 // ========================================
 export const terceroAPI = {
+    // Get full detail (persistence)
+    get: async (terceroId: number) => {
+        const { data } = await apiClient.get(`/api/terceros/${terceroId}/`);
+        return data;
+    },
+
     // Status de completitud
     getStatus: async (terceroId: number) => {
         const { data } = await apiClient.get(`/api/terceros/${terceroId}/status/`);

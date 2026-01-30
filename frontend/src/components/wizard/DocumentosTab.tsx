@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { FileText, Upload, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { FileText, Upload, Loader2, CheckCircle2, AlertCircle, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DocumentosRequeridos, DocumentoRequerido } from '@/components/forms/DocumentosRequeridos';
 import { vinculacionAPI } from '@/lib/api';
@@ -7,15 +7,59 @@ import { vinculacionAPI } from '@/lib/api';
 interface DocumentosTabProps {
     terceroId: number;
     documentosRequeridos: DocumentoRequerido[];
+    tipoPersona: "NATURAL" | "JURIDICA";
     onComplete?: () => void;
 }
 
-export default function DocumentosTab({ terceroId, documentosRequeridos, onComplete }: DocumentosTabProps) {
+export default function DocumentosTab({ terceroId, documentosRequeridos, tipoPersona, onComplete }: DocumentosTabProps) {
     const [documentFiles, setDocumentFiles] = useState<Record<string, File>>({});
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState<Record<string, 'uploading' | 'success' | 'error'>>({});
     const [error, setError] = useState<string>('');
     const [success, setSuccess] = useState(false);
+    const [personaChangeMessage, setPersonaChangeMessage] = useState<string>('');
+    const previousTipoPersonaRef = useRef<"NATURAL" | "JURIDICA">(tipoPersona);
+
+    // Detectar cambio de tipo_persona y limpiar archivos que ya no aplican
+    useEffect(() => {
+        if (previousTipoPersonaRef.current !== tipoPersona) {
+            // Obtener códigos de documentos que aplican al nuevo tipo
+            const validCodes = new Set(
+                documentosRequeridos.map(d => d.documento_tipo_code)
+            );
+
+            // Filtrar archivos seleccionados para mantener solo los que aplican
+            const filteredFiles: Record<string, File> = {};
+            let removedCount = 0;
+
+            for (const [code, file] of Object.entries(documentFiles)) {
+                if (validCodes.has(code)) {
+                    filteredFiles[code] = file;
+                } else {
+                    removedCount++;
+                }
+            }
+
+            // Actualizar estados si se removieron archivos
+            if (removedCount > 0) {
+                setDocumentFiles(filteredFiles);
+                setUploadProgress({});
+                setError('');
+                setSuccess(false);
+
+                // Mostrar mensaje informativo
+                const personaText = tipoPersona === "NATURAL" ? "Persona Natural" : "Persona Jurídica";
+                setPersonaChangeMessage(
+                    `Se limpió la selección de ${removedCount} documento(s) que no aplica(n) para ${personaText}`
+                );
+
+                // Limpiar mensaje después de 5 segundos
+                setTimeout(() => setPersonaChangeMessage(''), 5000);
+            }
+
+            previousTipoPersonaRef.current = tipoPersona;
+        }
+    }, [tipoPersona, documentFiles, documentosRequeridos]);
 
     const handleUpload = async () => {
         if (Object.keys(documentFiles).length === 0) {
@@ -63,7 +107,22 @@ export default function DocumentosTab({ terceroId, documentosRequeridos, onCompl
                 <p className="text-sm text-muted-foreground">
                     Adjunte los documentos necesarios para completar su vinculación
                 </p>
+                <p className="text-sm text-primary font-medium mt-2">
+                    Mostrando documentos para: {tipoPersona === "NATURAL" ? "Persona Natural" : "Persona Jurídica"}
+                </p>
             </div>
+
+            {/* Mensaje cuando se cambia tipo_persona */}
+            {personaChangeMessage && (
+                <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-start gap-3">
+                    <FileText className="w-5 h-5 text-blue-600 mt-0.5" />
+                    <div className="flex-1">
+                        <p className="text-sm text-blue-700 dark:text-blue-400">
+                            {personaChangeMessage}
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* Componente de selección de documentos */}
             <DocumentosRequeridos
@@ -146,10 +205,13 @@ export default function DocumentosTab({ terceroId, documentosRequeridos, onCompl
 
             {/* Información adicional */}
             <div className="mt-6 pt-6 border-t">
-                <p className="text-sm text-muted-foreground">
-                    💡 <strong>Nota:</strong> Puede cargar los documentos en múltiples sesiones.
-                    Los documentos obligatorios deben estar completos para enviar la solicitud a aprobación.
-                </p>
+                <div className="flex items-start gap-3 text-sm text-muted-foreground">
+                    <Lightbulb className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+                    <p>
+                        <strong className="text-foreground">Nota:</strong> Puede cargar los documentos en múltiples sesiones.
+                        Los documentos obligatorios deben estar completos para enviar la solicitud a aprobación.
+                    </p>
+                </div>
             </div>
         </div>
     );

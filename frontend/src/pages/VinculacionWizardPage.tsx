@@ -53,6 +53,16 @@ const VinculacionWizardPage = () => {
     const [status, setStatus] = useState<TerceroStatus | null>(null);
     const [statusLoading, setStatusLoading] = useState(false);
 
+    // Estado para tipo de persona con localStorage
+    const [tipoPersona, setTipoPersona] = useState<"NATURAL" | "JURIDICA">("NATURAL");
+
+    // Estado para documentos requeridos (cargados desde backend)
+    const [documentosRequeridos, setDocumentosRequeridos] = useState<DocumentoRequerido[]>([]);
+    const [loadingDocuments, setLoadingDocuments] = useState(false);
+
+    // Estado para persistir datos del formulario entre tabs
+    const [savedFormData, setSavedFormData] = useState<any>(null);
+
     // Cargar datos de la invitación
     useEffect(() => {
         const loadInvitacion = async () => {
@@ -75,6 +85,42 @@ const VinculacionWizardPage = () => {
         loadInvitacion();
     }, [token]);
 
+    // Cargar tipo_persona desde localStorage al montar
+    useEffect(() => {
+        if (!token) return;
+
+        const storageKey = `vinculacion:${token}:tipo_persona`;
+        const saved = localStorage.getItem(storageKey);
+
+        if (saved === "NATURAL" || saved === "JURIDICA") {
+            setTipoPersona(saved);
+        }
+    }, [token]);
+
+    // Forzar NATURAL para tipos de tercero específicos (regla de negocio)
+    useEffect(() => {
+        if (!invitacionData) return;
+
+        const naturalOnlyTypes = ["CONTRATISTA", "EMPLEADO", "SOCIO", "ASPIRANTE"];
+        if (naturalOnlyTypes.includes(invitacionData.tipo_tercero.code)) {
+            setTipoPersona("NATURAL");
+
+            // Guardar en localStorage
+            if (token) {
+                localStorage.setItem(`vinculacion:${token}:tipo_persona`, "NATURAL");
+            }
+        }
+    }, [invitacionData, token]);
+
+    // Guardar tipo_persona en localStorage cuando cambie
+    // SOLO si el tercero no existe aún (antes de guardarlo)
+    useEffect(() => {
+        if (!token || terceroId) return; // Ignorar si ya hay terceroId
+
+        const storageKey = `vinculacion:${token}:tipo_persona`;
+        localStorage.setItem(storageKey, tipoPersona);
+    }, [tipoPersona, token, terceroId]);
+
     // Refrescar status de completitud
     const refreshStatus = async () => {
         if (!terceroId) return;
@@ -95,6 +141,32 @@ const VinculacionWizardPage = () => {
             refreshStatus();
         }
     }, [terceroId]);
+
+    // Determinar si Persona Jurídica está deshabilitada (regla de negocio)
+    const isJuridicaDisabled = useMemo(() => {
+        if (!invitacionData) return false;
+
+        const naturalOnlyTypes = ["CONTRATISTA", "EMPLEADO", "SOCIO", "ASPIRANTE"];
+        return naturalOnlyTypes.includes(invitacionData.tipo_tercero.code);
+    }, [invitacionData]);
+
+    // Determinar si tipo_persona está bloqueado (después de crear tercero)
+    const isTipoPersonaLocked = Boolean(terceroId);
+
+    // Cargar documentos requeridos desde backend cuando cambie tipoPersona
+    useEffect(() => {
+        if (!token) return;
+
+        setLoadingDocuments(true);
+        vinculacionAPI
+            .getDocumentosRequeridosFiltrados(token, tipoPersona)
+            .then(setDocumentosRequeridos)
+            .catch((err) => {
+                console.error('Error al cargar documentos:', err);
+                setDocumentosRequeridos([]);
+            })
+            .finally(() => setLoadingDocuments(false));
+    }, [token, tipoPersona]);
 
     // Determinar tabs según tipo de tercero
     const tabs = useMemo(() => {
@@ -231,35 +303,39 @@ const VinculacionWizardPage = () => {
                                 const isCompleted = isTabCompleted(tab.id);
                                 const isActive = activeTab === tab.id;
 
+                                // Determine classes based on state
+                                let triggerClasses = "relative py-2.5 px-3 text-sm font-medium rounded-md transition-all inline-flex items-center justify-center gap-2 ";
+
+                                if (isActive) {
+                                    triggerClasses += "bg-primary text-primary-foreground shadow-sm border border-primary";
+                                } else if (isCompleted) {
+                                    triggerClasses += "bg-emerald-600 text-white hover:bg-emerald-700 border border-emerald-600";
+                                } else {
+                                    triggerClasses += "bg-muted text-muted-foreground hover:text-foreground border border-transparent";
+                                }
+
+                                if (isDisabled) {
+                                    triggerClasses += " opacity-50 cursor-not-allowed";
+                                }
+
                                 return (
                                     <TabsTrigger
                                         key={tab.id}
                                         value={tab.id}
                                         disabled={isDisabled}
-                                        className={`
-                                            relative py-2.5 px-3 text-sm font-medium rounded-md transition-all
-                                            inline-flex items-center justify-center gap-2
-                                            ${isActive
-                                                ? 'bg-background text-foreground shadow-sm border border-border'
-                                                : 'text-muted-foreground hover:text-foreground'
-                                            }
-                                            ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}
-                                            data-[state=active]:bg-background
-                                            data-[state=active]:text-foreground
-                                            data-[state=active]:shadow-sm
-                                        `}
+                                        className={triggerClasses}
                                     >
                                         {/* Step number or check */}
                                         {isCompleted ? (
-                                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-                                                <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/20">
+                                                <Check className="w-3 h-3 text-white" />
                                             </span>
                                         ) : (
                                             <span className={`
                                                 inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-semibold
                                                 ${isActive
-                                                    ? 'bg-primary text-primary-foreground'
-                                                    : 'bg-muted text-muted-foreground'
+                                                    ? 'bg-white/20 text-primary-foreground'
+                                                    : 'bg-black/10 text-muted-foreground'
                                                 }
                                             `}>
                                                 {index + 1}
@@ -277,7 +353,14 @@ const VinculacionWizardPage = () => {
                         <div className="bg-card border border-border rounded-xl">
                             <DatosBasicosTab
                                 token={token!}
+                                terceroId={terceroId}
                                 onTerceroCreated={handleTerceroCreated}
+                                tipoPersona={tipoPersona}
+                                setTipoPersona={setTipoPersona}
+                                isJuridicaDisabled={isJuridicaDisabled}
+                                isTipoPersonaLocked={isTipoPersonaLocked}
+                                savedFormData={savedFormData}
+                                onFormDataChange={setSavedFormData}
                             />
                         </div>
                     </TabsContent>
@@ -287,7 +370,8 @@ const VinculacionWizardPage = () => {
                             <div className="bg-card border border-border rounded-xl">
                                 <DocumentosTab
                                     terceroId={terceroId}
-                                    documentosRequeridos={invitacionData.documentos_requeridos || []}
+                                    documentosRequeridos={documentosRequeridos}
+                                    tipoPersona={tipoPersona}
                                     onComplete={refreshStatus}
                                 />
                             </div>
@@ -358,12 +442,9 @@ const VinculacionWizardPage = () => {
                                         )}
                                     </>
                                 ) : (
-                                    <button
-                                        onClick={refreshStatus}
-                                        className="text-sm text-primary hover:underline"
-                                    >
-                                        Verificar estado
-                                    </button>
+                                    <div className="inline-flex items-center gap-1.5 min-h-[20px]">
+                                        {/* Espacio reservado para evitar saltos, o simplemente nada si se quiere limpieza */}
+                                    </div>
                                 )}
                             </div>
 

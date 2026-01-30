@@ -15,23 +15,29 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
-
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 
 from terceros.views import formulario_vinculacion
 from proveedores.views import radicar_cuenta
 
 # API views
-from terceros.api_views import vinculacion_api, upload_documento, bulk_upload_documentos, tercero_status
+from terceros.api_views import vinculacion_api, upload_documento, bulk_upload_documentos, tercero_status, get_tercero_detail, get_documentos_requeridos_filtrados
 from terceros.viewsets import (
     EstudioViewSet, CursoViewSet, CertificacionViewSet,
     ExperienciaLaboralViewSet, TerceroIdiomaViewSet,
-    SeguridadSocialView, IdiomaListView
+    SeguridadSocialView, IdiomaListView, TerceroTagsView
 )
 from proveedores.api_views import radicacion_api
+from proveedores.wizard_viewsets import CuentaCobroWizardViewSet, TipoAnexoViewSet
 
 from django.conf import settings
 from django.conf.urls.static import static
+
+# DRF Router for wizard endpoints
+router = DefaultRouter()
+router.register(r'cuentas-cobro', CuentaCobroWizardViewSet, basename='cuentacobro')
+router.register(r'tipos-anexo', TipoAnexoViewSet, basename='tipoanexo')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -49,9 +55,19 @@ urlpatterns = [
     path("api/terceros/<int:tercero_id>/documentos/bulk-upload", 
          bulk_upload_documentos, name="bulk_upload_documentos"),
     
+    
     # Tercero status endpoint
     path("api/terceros/<int:tercero_id>/status/",
          tercero_status, name="tercero_status"),
+
+    # Tercero detail endpoint (persistence)
+    path("api/terceros/<int:tercero_id>/",
+            get_tercero_detail, name="tercero_detail"),
+    
+    # Filtered documents endpoint
+    path("api/vinculacion/<str:token>/documentos/",
+         get_documentos_requeridos_filtrados, name="documentos_filtrados"),
+
     
     # Profile CRUD endpoints - Estudios
     path("api/terceros/<int:tercero_id>/estudios/", 
@@ -94,6 +110,12 @@ urlpatterns = [
     
     # Idiomas catalog
     path("api/idiomas/", IdiomaListView.as_view(), name="idiomas_list"),
+    
+    # Tags endpoints
+    path("api/terceros/<int:tercero_id>/tags/", TerceroTagsView.as_view(), name="tercero_tags"),
+    
+    # Wizard API endpoints (DRF router)
+    path('api/', include(router.urls)),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

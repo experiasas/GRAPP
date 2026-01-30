@@ -7,6 +7,7 @@ export interface DocumentoRequerido {
     documento_tipo_code: string;
     documento_tipo_nombre: string;
     obligatorio: boolean;
+    aplica_a_persona: "NATURAL" | "JURIDICA" | "AMBAS";
 }
 
 export interface DocumentoUploadStatus {

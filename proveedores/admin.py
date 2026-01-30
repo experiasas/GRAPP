@@ -5,7 +5,7 @@ from terceros.models import Tercero
 # Register your models here.
 @admin.register(CuentaCobro)
 class CuentaCobroAdmin(admin.ModelAdmin):
-    list_display = ("id", "empresa", "proveedor", "numero", "periodo", "valor", "estado", "created_at")
+    list_display = ("id", "empresa", "proveedor", "numero", "periodo", "valor_total", "estado", "created_at")
     list_filter = ("empresa", "estado", "periodo")
     search_fields = ("numero", "proveedor__documento", "proveedor__razon_social", "proveedor__nombre1", "proveedor__apellido1")
 

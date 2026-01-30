@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Building2, User, FileText, MapPin, Phone, Mail, ChevronRight, Loader2 } from 'lucide-react';
+import { Building2, User, FileText, MapPin, Phone, Mail, ChevronRight, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,7 +22,7 @@ import {
     FormLabel,
     FormMessage,
 } from '@/components/ui/form';
-import { vinculacionAPI } from '@/lib/api';
+import { vinculacionAPI, terceroAPI } from '@/lib/api';
 
 const tiposDocumento = [
     { value: 'CC', label: 'Cédula de Ciudadanía' },
@@ -59,17 +59,35 @@ type FormData = z.infer<typeof formSchema>;
 
 interface DatosBasicosTabProps {
     token: string;
+    terceroId?: number | null;
     onTerceroCreated: (terceroId: number) => void;
+    tipoPersona: "NATURAL" | "JURIDICA";
+    setTipoPersona: (tipo: "NATURAL" | "JURIDICA") => void;
+    isJuridicaDisabled: boolean;
+    isTipoPersonaLocked: boolean;
+    savedFormData: any;
+    onFormDataChange: (data: any) => void;
 }
 
-export default function DatosBasicosTab({ token, onTerceroCreated }: DatosBasicosTabProps) {
+
+export default function DatosBasicosTab({
+    token,
+    terceroId,
+    onTerceroCreated,
+    tipoPersona,
+    setTipoPersona,
+    isJuridicaDisabled,
+    isTipoPersonaLocked,
+    savedFormData,
+    onFormDataChange
+}: DatosBasicosTabProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string>('');
 
     const form = useForm<FormData>({
         resolver: zodResolver(formSchema),
-        defaultValues: {
-            tipo_persona: 'NATURAL',
+        defaultValues: savedFormData || {
+            tipo_persona: tipoPersona,
             tipo_doc: '',
             documento: '',
             razon_social: '',
@@ -84,7 +102,86 @@ export default function DatosBasicosTab({ token, onTerceroCreated }: DatosBasico
         },
     });
 
-    const tipoPersona = form.watch('tipo_persona');
+    // Debounce timer para guardar valores del formulario
+    const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const isHydratingRef = useRef(false);
+
+    // Watch para guardar cambios del formulario con debounce
+    useEffect(() => {
+        const subscription = form.watch((values) => {
+            // ✅ NO guardar mientras estamos haciendo reset/hidratando datos
+            if (isHydratingRef.current) return;
+
+            // Cancelar timer previo
+            if (saveTimerRef.current) {
+                clearTimeout(saveTimerRef.current);
+            }
+
+            // Guardar después de 500ms de inactividad
+            saveTimerRef.current = setTimeout(() => {
+                onFormDataChange(values);
+            }, 500);
+        });
+
+        return () => {
+            subscription.unsubscribe();
+            if (saveTimerRef.current) {
+                clearTimeout(saveTimerRef.current);
+            }
+        };
+    }, [form, onFormDataChange]);
+
+    const currentTipoPersona = form.watch("tipo_persona");
+
+    // Forzar tipo_doc = NIT si es jurídica (y limpiar si deja de serlo)
+    useEffect(() => {
+        // ✅ Evita tocar el form si estás hidratando
+        if (isHydratingRef.current) return;
+
+        const doc = form.getValues("tipo_doc");
+
+        if (currentTipoPersona === "JURIDICA" && doc !== "NIT") {
+            form.setValue("tipo_doc", "NIT", { shouldDirty: true, shouldValidate: true });
+        }
+
+        if (currentTipoPersona !== "JURIDICA" && doc === "NIT") {
+            form.setValue("tipo_doc", "", { shouldDirty: true, shouldValidate: true });
+        }
+    }, [currentTipoPersona, form]);
+    // Cargar datos del tercero si ya existe
+    // 
+    useEffect(() => {
+        if (terceroId) {
+            terceroAPI.get(terceroId)
+                .then(data => {
+                    // Sincronizar tipo_persona desde backend (fuente de verdad)
+                    setTipoPersona(data.tipo_persona);
+
+                    const formData = {
+                        tipo_persona: data.tipo_persona,
+                        tipo_doc: data.tipo_doc,
+                        documento: data.documento,
+                        razon_social: data.razon_social || '',
+                        nombre1: data.nombre1 || '',
+                        nombre2: data.nombre2 || '',
+                        apellido1: data.apellido1 || '',
+                        apellido2: data.apellido2 || '',
+                        email: data.email || '',
+                        telefono: data.telefono || '',
+                        direccion: data.direccion || '',
+                        ciudad: data.ciudad || '',
+                    };
+                    form.reset(formData);
+                    onFormDataChange(formData);
+                })
+                .catch(err => console.error('Error cargando datos:', err));
+        }
+    }, [terceroId, form, onFormDataChange, setTipoPersona]);
+
+    // Sincronizar tipo_persona del formulario con el estado global
+
+
+
 
     const onSubmit = async (data: FormData) => {
         setIsSubmitting(true);
@@ -94,7 +191,33 @@ export default function DatosBasicosTab({ token, onTerceroCreated }: DatosBasico
             const response = await vinculacionAPI.submitTercero(token, data);
             onTerceroCreated(response.tercero_id);
         } catch (err: any) {
-            setError(err.message || 'Error al guardar los datos');
+            // Extract error message from backend response
+            let errorMsg = 'Error al procesar la solicitud';
+
+            if (err.response?.data?.message) {
+                // Backend returned a specific message
+                errorMsg = err.response.data.message;
+            } else if (err.response?.data?.errors) {
+                // Validation errors from serializer
+                const errors = err.response.data.errors;
+                const errorMessages = Object.entries(errors)
+                    .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+                    .join('. ');
+                errorMsg = errorMessages || 'Error de validación. Por favor revise los campos.';
+            } else if (err.message) {
+                // Generic error message
+                errorMsg = err.message;
+            }
+
+            setError(errorMsg);
+
+            // Si es un tercero duplicado con 409, navegar al siguiente tab
+            if (err.response?.status === 409 && err.response?.data?.tercero_id) {
+                // Usuario intentó duplicar, pero ya tiene un tercero creado
+                setTimeout(() => {
+                    onTerceroCreated(err.response.data.tercero_id);
+                }, 2000); // Mostrar mensaje 2 segundos antes de continuar
+            }
         } finally {
             setIsSubmitting(false);
         }
@@ -122,18 +245,34 @@ export default function DatosBasicosTab({ token, onTerceroCreated }: DatosBasico
                             <FormItem>
                                 <FormControl>
                                     <RadioGroup
-                                        onValueChange={field.onChange}
-                                        defaultValue={field.value}
+                                        value={field.value}
+                                        onValueChange={(val) => {
+                                            if (isTipoPersonaLocked) return;
+                                            if (val === "JURIDICA" && isJuridicaDisabled) return;
+
+                                            field.onChange(val);
+                                            setTipoPersona(val as "NATURAL" | "JURIDICA");
+                                        }}
                                         className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                                        disabled={isTipoPersonaLocked}
                                     >
                                         <Label
                                             htmlFor="natural"
-                                            className={`flex items-center gap-4 p-5 rounded-xl border-2 cursor-pointer transition-all duration-200 ${field.value === 'NATURAL'
-                                                ? 'border-primary bg-primary/5'
-                                                : 'border-border hover:border-primary/50 hover:bg-secondary/50'
+                                            className={`flex items-center gap-4 p-5 rounded-xl border-2 transition-all duration-200 ${isTipoPersonaLocked
+                                                ? 'opacity-70 cursor-not-allowed'
+                                                : 'cursor-pointer'
+                                                } ${field.value === 'NATURAL'
+                                                    ? 'border-primary bg-primary/5'
+                                                    : 'border-border hover:border-primary/50 hover:bg-secondary/50'
                                                 }`}
+                                            style={isTipoPersonaLocked ? { pointerEvents: 'none' } : undefined}
                                         >
-                                            <RadioGroupItem value="NATURAL" id="natural" className="sr-only" />
+                                            <RadioGroupItem
+                                                value="NATURAL"
+                                                id="natural"
+                                                className="sr-only"
+                                                disabled={isTipoPersonaLocked}
+                                            />
                                             <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${field.value === 'NATURAL' ? 'bg-primary text-primary-foreground' : 'bg-secondary'
                                                 }`}>
                                                 <User className="w-6 h-6" />
@@ -146,12 +285,20 @@ export default function DatosBasicosTab({ token, onTerceroCreated }: DatosBasico
 
                                         <Label
                                             htmlFor="juridica"
-                                            className={`flex items-center gap-4 p-5 rounded-xl border-2 cursor-pointer transition-all duration-200 ${field.value === 'JURIDICA'
-                                                ? 'border-primary bg-primary/5'
-                                                : 'border-border hover:border-primary/50 hover:bg-secondary/50'
+                                            className={`flex items-center gap-4 p-5 rounded-xl border-2 transition-all duration-200 ${isTipoPersonaLocked || isJuridicaDisabled
+                                                ? 'opacity-70 cursor-not-allowed border-border'
+                                                : field.value === 'JURIDICA'
+                                                    ? 'border-primary bg-primary/5 cursor-pointer'
+                                                    : 'border-border hover:border-primary/50 hover:bg-secondary/50 cursor-pointer'
                                                 }`}
+                                            style={isTipoPersonaLocked ? { pointerEvents: 'none' } : undefined}
                                         >
-                                            <RadioGroupItem value="JURIDICA" id="juridica" className="sr-only" />
+                                            <RadioGroupItem
+                                                value="JURIDICA"
+                                                id="juridica"
+                                                className="sr-only"
+                                                disabled={isTipoPersonaLocked || isJuridicaDisabled}
+                                            />
                                             <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${field.value === 'JURIDICA' ? 'bg-primary text-primary-foreground' : 'bg-secondary'
                                                 }`}>
                                                 <Building2 className="w-6 h-6" />
@@ -164,6 +311,25 @@ export default function DatosBasicosTab({ token, onTerceroCreated }: DatosBasico
                                     </RadioGroup>
                                 </FormControl>
                                 <FormMessage />
+
+                                {isTipoPersonaLocked && (
+                                    <div className="mt-4 flex gap-3 rounded-lg border border-border bg-background px-4 py-3 shadow-sm">
+                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted">
+                                            <Lock className="h-4 w-4 text-muted-foreground" />
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <p className="text-sm font-medium text-foreground">
+                                                Tipo de persona bloqueado
+                                            </p>
+                                            <p className="text-sm text-muted-foreground leading-relaxed">
+                                                El tipo de persona no puede modificarse después de guardar el registro.
+                                                Si requiere un cambio, contacte al administrador.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
                             </FormItem>
                         )}
                     />
@@ -188,25 +354,28 @@ export default function DatosBasicosTab({ token, onTerceroCreated }: DatosBasico
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel className="form-label">Tipo de Documento</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value}>
+                                    {currentTipoPersona === 'JURIDICA' ? (
                                         <FormControl>
-                                            <SelectTrigger className="h-12">
-                                                <SelectValue placeholder="Seleccione tipo de documento" />
-                                            </SelectTrigger>
+                                            <Input disabled value="NIT" className="h-12 bg-muted font-medium" />
                                         </FormControl>
-                                        <SelectContent>
-                                            {tiposDocumento
-                                                .filter(tipo => {
-                                                    if (tipoPersona === 'JURIDICA') return tipo.value === 'NIT';
-                                                    return tipo.value !== 'NIT';
-                                                })
-                                                .map(tipo => (
-                                                    <SelectItem key={tipo.value} value={tipo.value}>
-                                                        {tipo.label}
-                                                    </SelectItem>
-                                                ))}
-                                        </SelectContent>
-                                    </Select>
+                                    ) : (
+                                        <Select onValueChange={field.onChange} value={field.value}>
+                                            <FormControl>
+                                                <SelectTrigger className="h-12">
+                                                    <SelectValue placeholder="Seleccione tipo de documento" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                {tiposDocumento
+                                                    .filter(tipo => tipo.value !== 'NIT')
+                                                    .map(tipo => (
+                                                        <SelectItem key={tipo.value} value={tipo.value}>
+                                                            {tipo.label}
+                                                        </SelectItem>
+                                                    ))}
+                                            </SelectContent>
+                                        </Select>
+                                    )}
                                     <FormMessage />
                                 </FormItem>
                             )}
@@ -219,7 +388,7 @@ export default function DatosBasicosTab({ token, onTerceroCreated }: DatosBasico
                                 <FormItem>
                                     <FormLabel className="form-label">Número de Documento</FormLabel>
                                     <FormControl>
-                                        <Input {...field} placeholder="Ej: 1234567890" className="h-12" />
+                                        <Input {...field} placeholder="Ej: 1234567890" type="number" className="h-12" />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -227,7 +396,7 @@ export default function DatosBasicosTab({ token, onTerceroCreated }: DatosBasico
                         />
                     </div>
 
-                    {tipoPersona === 'JURIDICA' ? (
+                    {currentTipoPersona === 'JURIDICA' ? (
                         <div className="mt-6">
                             <FormField
                                 control={form.control}
@@ -348,7 +517,7 @@ export default function DatosBasicosTab({ token, onTerceroCreated }: DatosBasico
                                         </span>
                                     </FormLabel>
                                     <FormControl>
-                                        <Input {...field} placeholder="+57 300 123 4567" className="h-12" />
+                                        <Input {...field} placeholder="+57 300 123 4567" type="number" className="h-12" />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
