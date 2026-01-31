@@ -12,7 +12,7 @@ class CuentaCobroAdmin(admin.ModelAdmin):
 
 @admin.register(InvitacionRadicacion)
 class InvitacionRadicacionAdmin(admin.ModelAdmin):
-    list_display = ("email", "empresa", "proveedor", "estado", "created_at", "token")
+    list_display = ("email", "empresa", "proveedor", "contrato", "estado", "created_at", "token")
     list_filter = ("empresa", "estado", "created_at")
     search_fields = ("email", "proveedor__documento", "proveedor__razon_social", "proveedor__nombre1")
     ordering = ("-created_at",)
@@ -20,7 +20,7 @@ class InvitacionRadicacionAdmin(admin.ModelAdmin):
     readonly_fields = ("token", "created_at", "used_at")
 
     fieldsets = (
-        (None, {"fields": ("empresa", "proveedor", "email", "estado")}),
+        (None, {"fields": ("empresa", "proveedor", "contrato", "email", "estado")}),
         ("Acceso", {"fields": ("token", "created_at", "used_at")}),
     )
 

@@ -79,6 +79,12 @@ class InvitacionRadicacion(models.Model):
         limit_choices_to={"estado": "APROBADO", "tipos__code__in": ["PROVEEDOR", "CONTRATISTA"]},
     )
     email = models.EmailField()
+    contrato = models.ForeignKey(
+        "contratos.Contrato",
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="invitaciones_radicacion",
+    )
 
     estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.PENDIENTE)
     token = models.CharField(max_length=64, unique=True, editable=False)

@@ -85,80 +85,71 @@ class CuentaCobroWizardViewSet(viewsets.GenericViewSet):
         return_serializer = WizardRetrieveSerializer(cuenta)
         return Response(return_serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=['get'], url_path='wizard')
-    def retrieve_wizard(self, request, pk=None):
+    @action(detail=True, methods=['get', 'patch'], url_path='wizard')
+    def wizard_detail(self, request, pk=None):
         """
-        GET /api/cuentas-cobro/{id}/wizard/
-        Retrieve current wizard state with completion flags.
+        GET /api/cuentas-cobro/{id}/wizard/ - Retrieve current wizard state
+        PATCH /api/cuentas-cobro/{id}/wizard/?step=1|2 - Update specific wizard step
         """
         cuenta = self.get_object()
-        serializer = WizardRetrieveSerializer(cuenta)
-        return Response(serializer.data)
+        
+        if request.method == 'GET':
+            serializer = WizardRetrieveSerializer(cuenta)
+            return Response(serializer.data)
+        
+        elif request.method == 'PATCH':
+            step = request.query_params.get('step')
+            
+            if step == '1':
+                serializer = WizardStep1Serializer(
+                    cuenta, data=request.data, partial=True
+                )
+            elif step == '2':
+                serializer = WizardStep2Serializer(
+                    cuenta, data=request.data, partial=True
+                )
+            else:
+                return Response(
+                    {'error': 'El parámetro "step" debe ser 1 o 2.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            
+            # Return updated state
+            return_serializer = WizardRetrieveSerializer(cuenta)
+            return Response(return_serializer.data)
 
-    @action(detail=True, methods=['patch'], url_path='wizard')
-    def update_wizard(self, request, pk=None):
+    @action(detail=True, methods=['get', 'post'], url_path='anexos')
+    def handle_anexos(self, request, pk=None):
         """
-        PATCH /api/cuentas-cobro/{id}/wizard/?step=1|2
-        Update specific wizard step.
-        """
-        cuenta = self.get_object()
-        step = request.query_params.get('step')
-        
-        if step == '1':
-            serializer = WizardStep1Serializer(
-                cuenta, data=request.data, partial=True
-            )
-        elif step == '2':
-            serializer = WizardStep2Serializer(
-                cuenta, data=request.data, partial=True
-            )
-        else:
-            return Response(
-                {'error': 'El parámetro "step" debe ser 1 o 2.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        
-        # Return updated state
-        return_serializer = WizardRetrieveSerializer(cuenta)
-        return Response(return_serializer.data)
-
-    @action(detail=True, methods=['get'], url_path='anexos')
-    def list_anexos(self, request, pk=None):
-        """
-        GET /api/cuentas-cobro/{id}/anexos/
-        List all anexos for this cuenta.
-        """
-        cuenta = self.get_object()
-        anexos = cuenta.anexos.all()
-        serializer = AnexoSerializer(anexos, many=True)
-        return Response(serializer.data)
-
-    @action(detail=True, methods=['post'], url_path='anexos')
-    def create_anexo(self, request, pk=None):
-        """
-        POST /api/cuentas-cobro/{id}/anexos/
-        Upload a new anexo (multipart/form-data).
+        GET /api/cuentas-cobro/{id}/anexos/ - List anexos
+        POST /api/cuentas-cobro/{id}/anexos/ - Create anexo
         """
         cuenta = self.get_object()
         
-        # Validate cuenta is in BORRADOR
-        if cuenta.estado != CuentaCobro.Estado.BORRADOR:
-            return Response(
-                {'error': 'Solo se pueden agregar anexos a cuentas en estado BORRADOR.'},
-                status=status.HTTP_400_BAD_REQUEST
+        if request.method == 'GET':
+            anexos = cuenta.anexos.all()
+            serializer = AnexoSerializer(anexos, many=True)
+            return Response(serializer.data)
+            
+        elif request.method == 'POST':
+            # Validate cuenta is in BORRADOR
+            if cuenta.estado != CuentaCobro.Estado.BORRADOR:
+                return Response(
+                    {'error': 'Solo se pueden agregar anexos a cuentas en estado BORRADOR.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            serializer = AnexoSerializer(
+                data=request.data,
+                context={'cuenta_cobro': cuenta, 'request': request}
             )
-        
-        serializer = AnexoSerializer(
-            data=request.data,
-            context={'cuenta_cobro': cuenta, 'request': request}
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['delete'], url_path='anexos/(?P<anexo_id>[0-9]+)')
     def delete_anexo(self, request, pk=None, anexo_id=None):

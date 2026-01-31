@@ -60,10 +60,33 @@ class WizardCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError("Empresa no identificada en el contexto.")
 
         proveedor = validated_data.get('_proveedor')
+        invitacion = validated_data.get('_invitacion')
+        contrato = invitacion.contrato if invitacion else None
         
+        # Check for existing BORRADOR to resume
+        existing_borrador = CuentaCobro.objects.filter(
+            empresa=empresa,
+            proveedor=proveedor,
+            estado=CuentaCobro.Estado.BORRADOR
+        ).first()
+
+        if existing_borrador:
+            # Backfill contract if invitation has one and draft doesn't
+            if contrato and not existing_borrador.contrato_id:
+                existing_borrador.contrato = contrato
+                existing_borrador.save(update_fields=['contrato'])
+            
+            # Re-attach ephemeral invitation id for this session
+            if invitacion:
+                existing_borrador._invitacion_id = invitacion.id
+
+            return existing_borrador
+
+        # Create new draft with contract pre-assigned
         cuenta = CuentaCobro.objects.create(
             empresa=empresa,
             proveedor=proveedor,
+            contrato=contrato,  # ✅ Pre-assign contract from invitation
             estado=CuentaCobro.Estado.BORRADOR,
             numero='',  # Will be filled in step 1
             periodo='',
@@ -71,8 +94,8 @@ class WizardCreateSerializer(serializers.Serializer):
         )
         
         # Store invitacion reference if used
-        if '_invitacion' in validated_data:
-            cuenta._invitacion_id = validated_data['_invitacion'].id
+        if invitacion:
+            cuenta._invitacion_id = invitacion.id
 
         return cuenta
 
@@ -195,21 +218,70 @@ class WizardRetrieveSerializer(serializers.ModelSerializer):
     anexos_ok = serializers.SerializerMethodField()
     proveedor_nombre = serializers.SerializerMethodField()
     contrato_numero = serializers.CharField(source='contrato.numero', read_only=True, allow_null=True)
+    contrato_detalle = serializers.SerializerMethodField()
 
     class Meta:
         model = CuentaCobro
         fields = [
-            'id', 'empresa', 'proveedor', 'proveedor_nombre', 'contrato', 'contrato_numero',
+            'id', 'empresa', 'proveedor', 'proveedor_nombre', 'contrato', 'contrato_numero', 'contrato_detalle',
             'numero', 'periodo', 'concepto', 'observaciones',
             'valor_base', 'iva_valor', 'admon', 'imprevistos', 'utilidad', 'valor_total',
             'estado', 'created_at', 'updated_at',
             'anexos', 'step1_ok', 'step2_ok', 'anexos_ok'
         ]
 
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        
+        # Structure for frontend
+        return {
+            'id': ret['id'],
+            'empresa': ret['empresa'],
+            'proveedor': ret['proveedor'],
+            'proveedor_nombre': ret['proveedor_nombre'],
+            'estado': ret['estado'],
+            'contrato': ret.get('contrato'),
+            'contrato_numero': ret.get('contrato_numero'),
+            'contrato_detalle': ret.get('contrato_detalle'),
+            'created_at': ret['created_at'],
+            'updated_at': ret['updated_at'],
+            'step1_ok': ret['step1_ok'],
+            'step2_ok': ret['step2_ok'],
+            'anexos_ok': ret['anexos_ok'],
+            'datos_generales': {
+                'numero': ret.get('numero') or '',
+                'periodo': ret.get('periodo') or '',
+                'concepto': ret.get('concepto') or '',
+                'observaciones': ret.get('observaciones') or '',
+            },
+            'datos_financieros': {
+                'valor_base': ret.get('valor_base') or 0,
+                'iva_valor': ret.get('iva_valor') or 0,
+                'admon': ret.get('admon') or 0,
+                'imprevistos': ret.get('imprevistos') or 0,
+                'utilidad': ret.get('utilidad') or 0,
+                'valor_total': ret.get('valor_total') or 0,
+            },
+            'anexos': ret['anexos'],
+            'anexos_count': len(ret['anexos'])
+        }
+
     def get_proveedor_nombre(self, obj):
         if obj.proveedor:
             return str(obj.proveedor)
         return None
+    
+    def get_contrato_detalle(self, obj):
+        """Return full contract details if assigned."""
+        if not obj.contrato:
+            return None
+        return {
+            'id': obj.contrato.id,
+            'numero': obj.contrato.numero,
+            'objeto': obj.contrato.objeto if hasattr(obj.contrato, 'objeto') else None,
+            'fecha_inicio': obj.contrato.fecha_inicio if hasattr(obj.contrato, 'fecha_inicio') else None,
+            'fecha_fin': obj.contrato.fecha_fin if hasattr(obj.contrato, 'fecha_fin') else None,
+        }
 
     def get_step1_ok(self, obj):
         """Step 1 is complete if contrato, numero, periodo, concepto are filled."""
