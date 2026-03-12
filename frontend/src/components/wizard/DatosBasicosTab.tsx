@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Building2, User, FileText, MapPin, Phone, Mail, ChevronRight, Loader2, Lock } from 'lucide-react';
+import { Building2, User, FileText, MapPin, Phone, Mail, ChevronRight, Loader2, Lock, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -45,6 +45,10 @@ const formSchema = z.object({
     telefono: z.string().min(1, 'El teléfono es requerido').max(30, 'Máximo 30 caracteres'),
     direccion: z.string().min(1, 'La dirección es requerida').max(200, 'Máximo 200 caracteres'),
     ciudad: z.string().min(1, 'La ciudad es requerida').max(80, 'Máximo 80 caracteres'),
+    // Información tributaria (solo relevante para JURIDICA)
+    responsable_iva: z.enum(['SI', 'NO']).optional(),
+    agente_retenedor: z.enum(['SI', 'NO']).optional(),
+    regimen_tributario: z.enum(['ORDINARIO', 'SIMPLE', '']).optional(),
 }).refine((data) => {
     if (data.tipo_persona === 'JURIDICA') {
         return !!data.razon_social && data.razon_social.length > 0;
@@ -99,6 +103,9 @@ export default function DatosBasicosTab({
             telefono: '',
             direccion: '',
             ciudad: '',
+            responsable_iva: undefined,
+            agente_retenedor: undefined,
+            regimen_tributario: '',
         },
     });
 
@@ -187,8 +194,24 @@ export default function DatosBasicosTab({
         setIsSubmitting(true);
         setError('');
 
+        // Convertir SI/NO → boolean para el backend
+        const payload: any = { ...data };
+        if (data.tipo_persona === 'JURIDICA') {
+            payload.responsable_iva  = data.responsable_iva === 'SI' ? true
+                                     : data.responsable_iva === 'NO' ? false
+                                     : null;
+            payload.agente_retenedor = data.agente_retenedor === 'SI' ? true
+                                     : data.agente_retenedor === 'NO' ? false
+                                     : null;
+            payload.regimen_tributario = data.regimen_tributario || null;
+        } else {
+            payload.responsable_iva  = null;
+            payload.agente_retenedor = null;
+            payload.regimen_tributario = null;
+        }
+
         try {
-            const response = await vinculacionAPI.submitTercero(token, data);
+            const response = await vinculacionAPI.submitTercero(token, payload);
             onTerceroCreated(response.tercero_id);
         } catch (err: any) {
             // Extract error message from backend response
@@ -473,6 +496,8 @@ export default function DatosBasicosTab({
                     )}
                 </div>
 
+                
+
                 {/* Sección: Contacto */}
                 <div className="form-section">
                     <div className="flex items-center gap-3 mb-6">
@@ -526,6 +551,123 @@ export default function DatosBasicosTab({
                     </div>
                 </div>
 
+
+                {/* Sección: Información Tributaria (solo persona jurídica) */}
+                {currentTipoPersona === 'JURIDICA' && (
+                    <div className="form-section">
+                        <div className="flex items-center gap-3 mb-6">
+                           
+                            <div>
+                                <h3 className="font-semibold text-foreground">Información Tributaria</h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Declaración inicial. El administrador verificará con el RUT.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Responsable de IVA */}
+                            <FormField
+                                control={form.control}
+                                name="responsable_iva"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="form-label">Responsable de IVA</FormLabel>
+                                        <div className="grid grid-cols-2 gap-3 mt-1">
+                                            {(['SI', 'NO'] as const).map((val) => (
+                                                <label
+                                                    key={val}
+                                                    className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all text-sm font-medium ${
+                                                        field.value === val
+                                                            ? 'border-primary bg-primary/5 text-primary'
+                                                            : 'border-border hover:border-primary/40'
+                                                    }`}
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        className="sr-only"
+                                                        value={val}
+                                                        checked={field.value === val}
+                                                        onChange={() => field.onChange(val)}
+                                                    />
+                                                    {val === 'SI' ? 'Sí' : 'No'}
+                                                </label>
+                                            ))}
+                                        </div>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            {/* Agente Retenedor */}
+                            <FormField
+                                control={form.control}
+                                name="agente_retenedor"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="form-label">Agente Retenedor</FormLabel>
+                                        <div className="grid grid-cols-2 gap-3 mt-1">
+                                            {(['SI', 'NO'] as const).map((val) => (
+                                                <label
+                                                    key={val}
+                                                    className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all text-sm font-medium ${
+                                                        field.value === val
+                                                            ? 'border-primary bg-primary/5 text-primary'
+                                                            : 'border-border hover:border-primary/40'
+                                                    }`}
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        className="sr-only"
+                                                        value={val}
+                                                        checked={field.value === val}
+                                                        onChange={() => field.onChange(val)}
+                                                    />
+                                                    {val === 'SI' ? 'Sí' : 'No'}
+                                                </label>
+                                            ))}
+                                        </div>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+
+                        {/* Régimen Tributario */}
+                        <div className="mt-6">
+                            <FormField
+                                control={form.control}
+                                name="regimen_tributario"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="form-label">Régimen Tributario</FormLabel>
+                                        <Select
+                                            onValueChange={field.onChange}
+                                            value={field.value || ''}
+                                        >
+                                            <FormControl>
+                                                <SelectTrigger className="h-12">
+                                                    <SelectValue placeholder="Seleccione el régimen" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                <SelectItem value="ORDINARIO">Régimen Ordinario</SelectItem>
+                                                <SelectItem value="SIMPLE">Régimen Simple de Tributación</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+
+                        <p className="text-xs text-muted-foreground mt-4 bg-muted/50 rounded-lg p-3">
+                            Esta información será revisada por el administrador con base en el RUT
+                            cargado. Puede ser corregida durante el proceso de aprobación.
+                        </p>
+                    </div>
+                )}
+
                 {/* Sección: Ubicación */}
                 <div className="form-section">
                     <div className="flex items-center gap-3 mb-6">
@@ -568,6 +710,8 @@ export default function DatosBasicosTab({
                         />
                     </div>
                 </div>
+
+                
 
                 {error && (
                     <div className="p-4 bg-destructive/10 border border-destructive rounded-lg text-destructive text-sm">

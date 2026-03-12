@@ -3,6 +3,8 @@ import { Briefcase, Plus, Pencil, Trash2, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { AppAlert } from '@/components/ui/app-alert';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { terceroAPI } from '@/lib/api';
 
 interface ExperienciaLaboral {
@@ -25,6 +27,8 @@ export default function ExperienciasSection({ terceroId, onUpdate }: Experiencia
     const [showForm, setShowForm] = useState(false);
     const [editItem, setEditItem] = useState<ExperienciaLaboral | null>(null);
     const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [confirmId, setConfirmId] = useState<number | null>(null);
     const [formData, setFormData] = useState({
         empresa: '',
         cargo: '',
@@ -61,6 +65,7 @@ export default function ExperienciasSection({ terceroId, onUpdate }: Experiencia
 
     const handleAdd = () => {
         setEditItem(null);
+        setError(null);
         setFormData({ empresa: '', cargo: '', fecha_inicio: '', fecha_fin: '' });
         setShowForm(true);
     };
@@ -68,43 +73,56 @@ export default function ExperienciasSection({ terceroId, onUpdate }: Experiencia
     const handleCancel = () => {
         setShowForm(false);
         setEditItem(null);
+        setError(null);
         setFormData({ empresa: '', cargo: '', fecha_inicio: '', fecha_fin: '' });
     };
 
     const handleSave = async () => {
         if (!formData.empresa || !formData.cargo) {
-            alert('Complete los campos obligatorios');
+            setError('Complete los campos obligatorios');
             return;
         }
 
         setSaving(true);
+        setError(null);
         try {
+            const payload = {
+                ...formData,
+                fecha_inicio: formData.fecha_inicio || null,
+                fecha_fin: formData.fecha_fin || null,
+            };
+
             if (editItem) {
-                await terceroAPI.experiencias.update(terceroId, editItem.id, formData);
+                await terceroAPI.experiencias.update(terceroId, editItem.id, payload);
             } else {
-                await terceroAPI.experiencias.create(terceroId, formData);
+                await terceroAPI.experiencias.create(terceroId, payload);
             }
             await loadExperiencias();
             onUpdate?.();
             handleCancel();
         } catch (error) {
             console.error('Error saving experiencia:', error);
-            alert('Error al guardar la experiencia');
+            setError('Error al guardar la experiencia');
         } finally {
             setSaving(false);
         }
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm('¿Está seguro de eliminar esta experiencia?')) return;
+        setConfirmId(id);
+    };
 
+    const confirmDelete = async () => {
+        if (confirmId === null) return;
+        const id = confirmId;
+        setConfirmId(null);
         try {
             await terceroAPI.experiencias.delete(terceroId, id);
             await loadExperiencias();
             onUpdate?.();
         } catch (error) {
             console.error('Error deleting experiencia:', error);
-            alert('Error al eliminar la experiencia');
+            setError('Error al eliminar la experiencia');
         }
     };
 
@@ -122,6 +140,17 @@ export default function ExperienciasSection({ terceroId, onUpdate }: Experiencia
                     </Button>
                 )}
             </div>
+
+            <ConfirmDialog
+                open={confirmId !== null}
+                description="¿Está seguro de eliminar esta experiencia? Esta acción no se puede deshacer."
+                onConfirm={confirmDelete}
+                onCancel={() => setConfirmId(null)}
+            />
+
+            {error && !showForm && (
+                <AppAlert type="error" description={error} className="mb-4" />
+            )}
 
             {loading ? (
                 <div className="flex justify-center py-8">
@@ -176,6 +205,10 @@ export default function ExperienciasSection({ terceroId, onUpdate }: Experiencia
                                 </Button>
                             </div>
 
+                            {error && (
+                                <AppAlert type="error" description={error} className="mb-4" />
+                            )}
+
                             <div className="space-y-4">
                                 <div>
                                     <Label>Empresa *</Label>
@@ -191,7 +224,7 @@ export default function ExperienciasSection({ terceroId, onUpdate }: Experiencia
                                     <Input
                                         value={formData.cargo}
                                         onChange={(e) => setFormData({ ...formData, cargo: e.target.value })}
-                                        placeholder="Ej: Desarrollador Senior, Gerente de Proyectos..."
+                                        placeholder="Ej: Auxiliar Administrativo, Técnico Electricista, Analista Contable"
                                     />
                                 </div>
 

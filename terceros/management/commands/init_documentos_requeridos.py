@@ -13,25 +13,25 @@ class Command(BaseCommand):
         # Estructura: TIPO_TERCERO -> TIPO_PERSONA -> [LISTA DE CODES DOCS]
         MATRIZ = {
             "CLIENTE": {
-                "NATURAL": ["CEDULA", "RUT", "NDA", "TRATAMIENTO_DATOS", "DOF"],
-                "JURIDICA": ["CAMARA_COMERCIO", "RUT", "CEDULA_RL", "EEFF", "NDA", "TRATAMIENTO_DATOS", "DOF"],
+                "NATURAL": ["CEDULA", "RUT", "DOF"],
+                "JURIDICA": ["CAMARA_COMERCIO", "RUT", "CEDULA_RL", "EEFF", "DOF"],
             },
             "PROVEEDOR": {
-                "NATURAL": ["CEDULA", "RUT", "NDA", "TRATAMIENTO_DATOS", "CERT_BANCARIA"],
-                "JURIDICA": ["CAMARA_COMERCIO", "RUT", "CEDULA_RL", "NDA", "TRATAMIENTO_DATOS", "CERT_BANCARIA"],
+                "NATURAL": ["CEDULA", "RUT", "CERT_BANCARIA"],
+                "JURIDICA": ["CAMARA_COMERCIO", "RUT", "CEDULA_RL", "CERT_BANCARIA"],
             },
             "CONTRATISTA": {
-                "NATURAL": ["CEDULA", "RUT", "NDA", "TRATAMIENTO_DATOS", "SS"],
+                "NATURAL": ["CEDULA", "RUT", "SS"],
                 # Asumimos que si no está en la matriz, no aplica o no se define aun
             },
             "EMPLEADO": {
-                "NATURAL": ["CEDULA", "RUT", "NDA", "TRATAMIENTO_DATOS", "SS"],
+                "NATURAL": ["CEDULA", "RUT", "SS"],
             },
             "SOCIO": {
                 "NATURAL": ["CEDULA"],
             },
             "ASPIRANTE": {
-                "NATURAL": ["CEDULA", "RUT", "NDA", "TRATAMIENTO_DATOS", "SS"],
+                "NATURAL": ["CEDULA", "RUT", "SS"],
             },
         }
 

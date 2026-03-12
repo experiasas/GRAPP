@@ -56,8 +56,36 @@ class TerceroCreateSerializer(serializers.ModelSerializer):
             'tipo_regimen', 'responsabilidades_tributarias',
             'email_facturacion_electronica',
             'rl_nombre', 'rl_tipo_doc', 'rl_documento',
-            'tes_contacto', 'tes_cargo', 'tes_email'
+            'tes_contacto', 'tes_cargo', 'tes_email',
+            # Información tributaria estructurada
+            'responsable_iva', 'agente_retenedor', 'regimen_tributario',
         ]
+
+
+class TerceroDetailSerializer(serializers.ModelSerializer):
+    """Serializer for reading tercero details with computed fields"""
+    nombre_completo = serializers.SerializerMethodField()
+    numero_documento = serializers.CharField(source='documento', read_only=True)
+    
+    class Meta:
+        model = Tercero
+        fields = [
+            'id', 'tipo_persona', 'tipo_doc', 'documento', 'numero_documento',
+            'nombre1', 'nombre2', 'apellido1', 'apellido2',
+            'razon_social', 'nombre_completo',
+            'email', 'telefono', 'celular',
+            'estado', 'created_at',
+            'responsable_iva', 'agente_retenedor', 'regimen_tributario',
+        ]
+        read_only_fields = fields
+    
+    def get_nombre_completo(self, obj):
+        """Return full name for natural person or razon_social for juridical"""
+        if obj.tipo_persona == Tercero.TipoPersona.NATURAL:
+            partes = [obj.nombre1, obj.nombre2, obj.apellido1, obj.apellido2]
+            return " ".join([p for p in partes if p])
+        return obj.razon_social or ""
+
 
 
 # ========================================

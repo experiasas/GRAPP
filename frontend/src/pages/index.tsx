@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Users, Receipt, Building2 } from "lucide-react";
+import { Users, Receipt } from "lucide-react";
 import { VinculacionTercerosForm } from "@/components/forms/VinculacionTercerosForm";
 import { RadicacionCuentaForm } from "@/components/forms/RadicacionCuentaForm";
 import { SuccessScreen } from "@/components/forms/SuccessScreen";
+import { Navbar } from "@/components/Navbar";
 
 type FormType = "terceros" | "cuentas" | null;
 type ViewState = "select" | "form" | "success";
@@ -53,16 +54,7 @@ const Index = () => {
         const isTereceros = successData.type === "terceros";
         return (
             <div className="min-h-screen bg-background">
-                <header className="border-b border-border bg-card">
-                    <div className="container mx-auto px-4 py-4">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-                                <Building2 className="w-5 h-5 text-primary-foreground" />
-                            </div>
-                            <span className="text-xl font-semibold text-foreground">GRAPP</span>
-                        </div>
-                    </div>
-                </header>
+                <Navbar />
                 <SuccessScreen
                     title={isTereceros ? "¡Vinculación Exitosa!" : "¡Cuenta Radicada!"}
                     subtitle={isTereceros
@@ -93,21 +85,10 @@ const Index = () => {
     if (viewState === "form" && selectedForm) {
         return (
             <div className="min-h-screen bg-background">
-                <header className="border-b border-border bg-card sticky top-0 z-10">
-                    <div className="container mx-auto px-4 py-4">
-                        <div className="flex items-center justify-between">
-                            <button onClick={handleReset} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                                <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-                                    <Building2 className="w-5 h-5 text-primary-foreground" />
-                                </div>
-                                <span className="text-xl font-semibold text-foreground">GRAPP</span>
-                            </button>
-                            <span className="text-sm text-muted-foreground">
-                                {selectedForm === "terceros" ? "Vinculación de Terceros" : "Radicación de Cuenta"}
-                            </span>
-                        </div>
-                    </div>
-                </header>
+                <Navbar
+                    onLogoClick={handleReset}
+                    subtitle={selectedForm === "terceros" ? "Vinculación de Terceros" : "Radicación de Cuenta"}
+                />
 
                 <main className="container mx-auto px-4 py-8 max-w-3xl">
                     <div className="mb-8">
@@ -135,16 +116,7 @@ const Index = () => {
     // Selector de formulario
     return (
         <div className="min-h-screen bg-background">
-            <header className="border-b border-border bg-card">
-                <div className="container mx-auto px-4 py-4">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-                            <Building2 className="w-5 h-5 text-primary-foreground" />
-                        </div>
-                        <span className="text-xl font-semibold text-foreground">GRAPP</span>
-                    </div>
-                </div>
-            </header>
+            <Navbar />
 
             <main className="container mx-auto px-4 py-16 max-w-4xl">
                 <div className="text-center mb-12">

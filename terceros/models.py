@@ -2,11 +2,23 @@ from django.db import models
 
 # Create your models here.
 # terceros/models.py
+import os
+from uuid import uuid4
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils.crypto import get_random_string
 
 from tenancy.models import Empresa  
+
+def upload_doc_tercero(instance, filename):
+    ext = os.path.splitext(filename)[1].lower()
+    return (
+        f"terceros/anexos/"
+        f"{instance.empresa_id}/"
+        f"{instance.tercero_id}/"
+        f"{instance.documento_tipo.code}/"
+        f"{uuid4().hex}{ext}"
+    )
 
 User = get_user_model()
 
@@ -71,6 +83,7 @@ class Tercero(models.Model):
         JURIDICA = "JURIDICA", "Persona jurídica"
 
     empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name="terceros")
+    usuario = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="tercero_perfil", help_text="Usuario vinculado para portal de terceros")
 
     # Forma de persona
     tipo_persona = models.CharField(max_length=20, choices=TipoPersona.choices, default=TipoPersona.JURIDICA)
@@ -101,6 +114,29 @@ class Tercero(models.Model):
     # Tributario (si lo necesitas en vinculación)
     tipo_regimen = models.CharField(max_length=50, blank=True, null=True)
     responsabilidades_tributarias = models.TextField(blank=True, null=True)
+
+    # Información tributaria estructurada (principalmente persona jurídica)
+    class RegimenTributario(models.TextChoices):
+        ORDINARIO = "ORDINARIO", "Régimen Ordinario"
+        SIMPLE    = "SIMPLE",    "Régimen Simple de Tributación"
+
+    responsable_iva = models.BooleanField(
+        null=True, blank=True,
+        verbose_name="Responsable de IVA",
+        help_text="¿El tercero es responsable de IVA ante la DIAN?"
+    )
+    agente_retenedor = models.BooleanField(
+        null=True, blank=True,
+        verbose_name="Agente Retenedor",
+        help_text="¿El tercero actúa como agente retenedor?"
+    )
+    regimen_tributario = models.CharField(
+        max_length=20,
+        choices=RegimenTributario.choices,
+        null=True, blank=True,
+        verbose_name="Régimen Tributario",
+        help_text="Régimen tributario del tercero"
+    )
 
     # Facturación electrónica (requisito para Cliente)
     email_facturacion_electronica = models.EmailField(blank=True, null=True)
@@ -360,7 +396,12 @@ class DocumentoTercero(models.Model):
     tercero = models.ForeignKey(Tercero, on_delete=models.CASCADE, related_name="documentos")
     documento_tipo = models.ForeignKey(DocumentoTipo, on_delete=models.PROTECT)
 
-    archivo = models.FileField(upload_to="terceros/anexos/", blank=True, null=True)
+    archivo = models.FileField(
+    upload_to=upload_doc_tercero,
+    max_length=500,   # defensivo
+    blank=True,
+    null=True
+)
     estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.PENDIENTE)
 
     # Campos listos para "firma digital + QR" (MVP2)
@@ -375,13 +416,16 @@ class DocumentoTercero(models.Model):
     class Meta:
         unique_together = ("tercero", "documento_tipo")
 
+    def __str__(self):
+        return f"{self.tercero} - {self.documento_tipo} - {self.estado}"
+
 
 # -------------------------
 # 4) Datos extra para Contratista/Aspirante/Socio
 # -------------------------
 class Estudio(models.Model):
     class Nivel(models.TextChoices):
-        COLEGIO = "COLEGIO", "Colegio"
+        BACHILLER = "BACHILLER", "Bachiller"
         TECNICO = "TECNICO", "Técnico"
         TECNOLOGO = "TECNOLOGO", "Tecnólogo"
         PROFESIONAL = "PROFESIONAL", "Profesional"
@@ -524,3 +568,28 @@ class SolicitudActualizacionTercero(models.Model):
         if not self.codigo:
             self.codigo = get_random_string(12).upper()
         super().save(*args, **kwargs)
+
+# -------------------------
+# 7) Activación y Acceso de Terceros
+# -------------------------
+class TokenActivacionTercero(models.Model):
+    usuario = models.OneToOneField(User, on_delete=models.CASCADE, related_name="token_activacion_tercero")
+    token = models.CharField(max_length=64, unique=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    def is_valid(self):
+        from django.utils import timezone
+        return self.expires_at > timezone.now()
+
+    def save(self, *args, **kwargs):
+        from django.utils import timezone
+        from datetime import timedelta
+        if not self.token:
+            self.token = get_random_string(64)
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(hours=48)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Token de {self.usuario.email}"

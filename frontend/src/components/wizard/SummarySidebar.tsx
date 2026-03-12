@@ -1,9 +1,7 @@
 import { WizardEstado, Anexo, TipoAnexo } from '@/api/wizardApi';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { AlertCircle, Loader2, Send } from 'lucide-react';
+import { Loader2, Circle, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const formatCurrency = (value: number) => {
@@ -31,172 +29,233 @@ export const SummarySidebar = ({
     canSubmit,
     isSaving,
 }: SummarySidebarProps) => {
-    if (!estado) return <div className="animate-pulse h-96 bg-slate-100 rounded-xl" />;
+    if (!estado) {
+        return (
+            <div className="sticky top-24 space-y-4">
+                <div className="summary-card animate-pulse">
+                    <div className="p-6 space-y-4">
+                        <div className="h-4 bg-muted rounded w-1/3"></div>
+                        <div className="h-8 bg-muted rounded w-2/3"></div>
+                        <div className="h-4 bg-muted rounded w-1/2"></div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     const obligatorios = tiposAnexo.filter(t => t.obligatorio);
     const missingObligatorios = obligatorios.filter(t => !anexos.some(a => a.tipo.id === t.id));
+    const isReadOnly = estado.estado !== 'BORRADOR';
+
+    const getEstadoDisplay = (estado: string) => {
+        if (estado === 'EN_REVISION') return 'En validación';
+        if (estado === 'BORRADOR') return 'Borrador';
+        // Capitalize first letter, lowercase rest
+        return estado.charAt(0).toUpperCase() + estado.slice(1).toLowerCase();
+    };
 
     return (
-        <div className="sticky top-24 space-y-6">
-            {/* Primary Metrics Card - Dashboard Style */}
-            <Card className="shadow-sm">
-                <CardContent className="pt-6 pb-6">
-                    {/* Estado Metric */}
-                    <div className="text-center pb-6 border-b">
-                        <p className="text-xs uppercase tracking-widest text-muted-foreground font-semibold mb-2">Estado</p>
-                        <p className="text-3xl font-bold mb-2">{estado.estado === 'RADICADA' ? 'Radicada' : 'Borrador'}</p>
-                        <Badge
-                            variant={estado.estado === 'RADICADA' ? 'default' : 'outline'}
-                            className="font-medium text-xs"
-                        >
-                            {estado.estado === 'RADICADA' ? 'Validación en curso' : 'En edición'}
-                        </Badge>
-                    </div>
+        <div className="space-y-6">
+            {/* Status Card */}
+            <div className="bg-card border border-border shadow-sm rounded-xl overflow-hidden">
+                <div className="p-5 flex flex-col gap-2">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Estado</p>
 
-                    {/* Contract Info - Compact Metric */}
-                    {estado.contrato_detalle && (
-                        <div className="pt-6 pb-6 border-b">
-                            <p className="text-xs uppercase tracking-widest text-muted-foreground font-semibold mb-2">Contrato</p>
-                            <p className="text-2xl font-bold mb-1">{estado.contrato_detalle.numero}</p>
-                            {estado.contrato_detalle.objeto && (
-                                <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{estado.contrato_detalle.objeto}</p>
+                    <p className="text-xl font-bold text-foreground">
+                        {getEstadoDisplay(estado.estado)}
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                        {estado.tipo_documento && (
+                            <div className="px-3 py-1 bg-secondary text-secondary-foreground text-xs font-semibold rounded-md border border-border">
+                                {estado.tipo_documento === 'FACTURA'
+                                    ? 'Factura'
+                                    : 'Cuenta de Cobro'}
+                            </div>
+                        )}
+
+                        <div
+                            className={cn(
+                                "px-3 py-1 text-xs font-semibold rounded-md",
+                                isReadOnly
+                                    ? "bg-success/10 text-success"
+                                    : "bg-muted text-muted-foreground"
                             )}
+                        >
+                            {isReadOnly ? 'Solo lectura' : 'En edición'}
                         </div>
-                    )}
-
-                    {/* Total Value - Hero Metric */}
-                    <div className="pt-6 text-center">
-                        <p className="text-xs uppercase tracking-widest text-muted-foreground font-semibold mb-2">Valor Total</p>
-                        <p className="text-4xl font-bold tabular-nums">
-                            {formatCurrency(estado.datos_financieros.valor_total)}
-                        </p>
                     </div>
-                </CardContent>
-            </Card>
+                </div>
 
-            {/* Financial Summary - Clean Breakdown */}
-            <Card className="shadow-sm bg-muted/20">
-                <CardContent className="pt-5 pb-5">
-                    <h3 className="text-xs uppercase tracking-widest text-muted-foreground font-semibold mb-4">Desglose</h3>
+                {/* Total Value */}
+                <div className="p-5 border-t border-border">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-1">Valor Total</p>
+                    <p className="text-3xl font-extrabold text-foreground tabular-nums tracking-tight">
+                        {formatCurrency(estado.datos_financieros.valor_total)}
+                    </p>
+                </div>
+
+                {/* Contract Info */}
+                {estado.contrato_detalle && (
+                    <div className="p-5 border-t border-border">
+                        <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">Contrato</p>
+                        <p className="text-base font-bold text-foreground">{estado.contrato_detalle.numero}</p>
+                        {estado.contrato_detalle.objeto && (
+                            <p className="text-sm text-muted-foreground line-clamp-2 mt-2 leading-relaxed">
+                                {estado.contrato_detalle.objeto}
+                            </p>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* Financial Breakdown */}
+            <div className="bg-card border border-border shadow-sm rounded-xl overflow-hidden">
+                <div className="p-5">
+                    <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-4">
+                        Desglose Financiero
+                    </h3>
+
                     <div className="space-y-3 text-sm">
                         <div className="flex justify-between items-center">
                             <span className="text-muted-foreground">Base</span>
-                            <span className="font-semibold tabular-nums">{formatCurrency(estado.datos_financieros.valor_base)}</span>
+                            <span className="font-semibold text-foreground tabular-nums">{formatCurrency(estado.datos_financieros.valor_base)}</span>
                         </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">IVA</span>
-                            <span className="font-semibold tabular-nums">{formatCurrency(estado.datos_financieros.iva_valor)}</span>
-                        </div>
-                        {(estado.datos_financieros.admon > 0 || estado.datos_financieros.imprevistos > 0 || estado.datos_financieros.utilidad > 0) && (
-                            <div className="flex justify-between items-center pt-2 border-t">
-                                <span className="text-muted-foreground text-xs">AIU</span>
-                                <span className="font-medium tabular-nums text-xs">{formatCurrency(estado.datos_financieros.admon + estado.datos_financieros.imprevistos + estado.datos_financieros.utilidad)}</span>
-                            </div>
+                        {estado.tipo_documento === 'FACTURA' && (
+                            <>
+                                {Number(estado.datos_financieros.iva_porcentaje) > 0 && (
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-muted-foreground">
+                                            IVA ({Number(estado.datos_financieros.iva_porcentaje)}%)
+                                        </span>
+                                        <span className="font-semibold text-foreground tabular-nums">
+                                            {formatCurrency(Number(estado.datos_financieros.iva_valor))}
+                                        </span>
+                                    </div>
+                                )}
+                                {(Number(estado.datos_financieros.admon) > 0 ||
+                                  Number(estado.datos_financieros.imprevistos) > 0 ||
+                                  Number(estado.datos_financieros.utilidad) > 0) && (
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-muted-foreground">A.I.U</span>
+                                        <span className="font-semibold text-foreground tabular-nums">
+                                            {formatCurrency(
+                                                Number(estado.datos_financieros.admon || 0) +
+                                                Number(estado.datos_financieros.imprevistos || 0) +
+                                                Number(estado.datos_financieros.utilidad || 0)
+                                            )}
+                                        </span>
+                                    </div>
+                                )}
+                            </>
                         )}
+                        <div className="flex justify-between items-center border-t border-border mt-4 pt-4">
+                            <span className="text-foreground font-bold">Total</span>
+                            <span className="font-extrabold text-foreground tabular-nums text-lg">{formatCurrency(estado.datos_financieros.valor_total)}</span>
+                        </div>
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </div>
 
             {/* Requirements Progress */}
-            <Card className="shadow-sm">
-                <CardContent className="pt-5 pb-5">
-                    <h3 className="text-xs uppercase tracking-widest text-muted-foreground font-semibold mb-4">Requisitos</h3>
+            <div className="bg-card border border-border shadow-sm rounded-xl overflow-hidden">
+                <div className="p-5">
+                    <h3 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-4">
+                        Progreso
+                    </h3>
 
-                    {/* Progress Metrics Grid */}
-                    <div className="grid grid-cols-3 gap-3 mb-4">
-                        <MetricBox
-                            label="Paso 1"
+                    <div className="grid grid-cols-3 gap-2">
+                        <RequirementBox
+                            label="Datos"
                             isComplete={estado.step1_ok}
                         />
-                        <MetricBox
-                            label="Paso 2"
+                        <RequirementBox
+                            label="Valores"
                             isComplete={estado.step2_ok}
                         />
-                        <MetricBox
+                        <RequirementBox
                             label="Anexos"
-                            value={`${anexos.length}/${obligatorios.length}`}
                             isComplete={estado.anexos_ok}
+                            count={`${anexos.length}/${obligatorios.length}`}
                         />
                     </div>
 
-                    {/* Missing Anexos - Compact */}
+                    {/* Missing Anexos */}
                     {missingObligatorios.length > 0 && (
-                        <div className="pt-3 border-t">
-                            <p className="text-xs text-muted-foreground mb-2 font-medium">Pendientes</p>
+                        <div className="mt-5 pt-4 border-t border-border">
+                            <p className="text-xs text-muted-foreground mb-2 font-medium">Pendientes:</p>
                             <div className="flex flex-wrap gap-1.5">
                                 {missingObligatorios.map(t => (
-                                    <Badge key={t.id} variant="outline" className="text-xs text-destructive border-destructive/30">
+                                    <Badge
+                                        key={t.id}
+                                        variant="outline"
+                                        className="text-xs text-destructive border-destructive/30 bg-destructive/5"
+                                    >
                                         {t.nombre}
                                     </Badge>
                                 ))}
                             </div>
                         </div>
                     )}
-                </CardContent>
-            </Card>
+                </div>
+            </div>
 
             {/* Action Button */}
-            <Button
-                className="w-full h-12 text-base font-semibold shadow-sm"
-                onClick={onSubmit}
-                disabled={!canSubmit || isSaving || estado.estado !== 'BORRADOR'}
-                variant={canSubmit ? "default" : "secondary"}
-                size="lg"
-            >
-                {isSaving ? (
-                    <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Radicando...
-                    </>
-                ) : (
-                    <>
-                        <Send className="w-4 h-4 mr-2" />
-                        Radicar Cuenta
-                    </>
+            <div className="pt-2">
+                <Button
+                    className={cn(
+                        "w-full h-12 text-sm font-semibold transition-all duration-200",
+                        "bg-primary text-primary-foreground hover:bg-primary/90",
+                        (!canSubmit || isSaving || isReadOnly) && "opacity-50 cursor-not-allowed"
+                    )}
+                    onClick={onSubmit}
+                    disabled={!canSubmit || isSaving || isReadOnly}
+                >
+                    {isSaving ? (
+                        <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Radicando...
+                        </>
+                    ) : (
+                        `Radicar ${estado?.tipo_documento === 'FACTURA' ? 'Factura' : 'Cuenta'}`
+                    )}
+                </Button>
+                {!canSubmit && !isReadOnly && (
+                    <p className="text-center text-xs text-muted-foreground mt-3">
+                        Complete todos los pasos para radicar
+                    </p>
                 )}
-            </Button>
-            {!canSubmit && estado.estado === 'BORRADOR' && (
-                <p className="text-center text-xs text-muted-foreground -mt-3">
-                    Complete todos los requisitos
-                </p>
-            )}
+            </div>
         </div>
     );
 };
 
-// Metric Box Component for Progress Grid
-const MetricBox = ({ label, value, isComplete }: { label: string; value?: string; isComplete: boolean }) => (
-    <div className={cn(
-        "text-center p-3 rounded-lg border transition-colors",
-        isComplete
-            ? "bg-primary/5 border-primary/20"
-            : "bg-muted/30 border-border"
-    )}>
-        <p className="text-xs text-muted-foreground mb-1 font-medium">{label}</p>
-        {value ? (
-            <p className="text-lg font-bold tabular-nums">{value}</p>
-        ) : (
-            <div className={cn(
-                "w-6 h-6 mx-auto rounded-full flex items-center justify-center",
-                isComplete ? "bg-primary text-primary-foreground" : "border-2 border-muted-foreground/30"
+// Requirement Box Component
+const RequirementBox = ({
+    label,
+    isComplete,
+    count
+}: {
+    label: string;
+    isComplete: boolean;
+    count?: string;
+}) => (
+    <div className="flex flex-col items-center justify-center p-3 bg-secondary/50 rounded-lg border border-border text-center">
+        <div className="mb-2">
+            {isComplete ? (
+                <CheckCircle2 className="w-5 h-5 text-success" />
+            ) : (
+                <Circle className="w-5 h-5 text-muted-foreground/40" />
+            )}
+        </div>
+        <p className="text-xs text-foreground font-semibold">{label}</p>
+        {count && (
+            <p className={cn(
+                "text-[10px] font-bold mt-0.5",
+                isComplete ? "text-success" : "text-muted-foreground"
             )}>
-                {isComplete && <span className="text-xs">✓</span>}
-            </div>
+                {count}
+            </p>
         )}
     </div>
-);
-
-// Chip-style status indicator component (keep for compatibility)
-const StatusChip = ({ label, isComplete }: { label: string; isComplete: boolean }) => (
-    <Badge
-        variant={isComplete ? "secondary" : "outline"}
-        className={cn(
-            "px-3 py-1.5 text-xs font-medium rounded-full transition-colors",
-            isComplete
-                ? "bg-primary/10 text-primary border-primary/20"
-                : "bg-muted text-muted-foreground border-border"
-        )}
-    >
-        {label}
-    </Badge>
 );

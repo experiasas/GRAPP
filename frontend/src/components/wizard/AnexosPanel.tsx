@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Anexo, TipoAnexo } from '@/api/wizardApi';
 import { Button } from '@/components/ui/button';
-import { Upload, Trash2, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Upload, Trash2, FileText, CheckCircle2, ExternalLink, AlertCircle, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 
@@ -11,20 +11,53 @@ interface AnexosPanelProps {
     onUpload: (tipoId: number, file: File) => Promise<void>;
     onDelete: (anexoId: number) => Promise<void>;
     readOnly?: boolean;
+    requiereSeguridadSocial?: boolean;
 }
 
-export const AnexosPanel = ({ anexos, tipos, onUpload, onDelete, readOnly }: AnexosPanelProps) => {
+export const AnexosPanel = ({
+    anexos,
+    tipos,
+    onUpload,
+    onDelete,
+    readOnly,
+    requiereSeguridadSocial,
+}: AnexosPanelProps) => {
+    // Los tipos ya vienen filtrados por tipo_persona desde el backend
     const obligatorios = tipos.filter(t => t.obligatorio);
     const opcionales = tipos.filter(t => !t.obligatorio);
 
     return (
-        <div className="space-y-8">
-            <section>
-                <div className="flex items-center gap-2 mb-4">
-                    <div className="w-1 h-6 bg-red-500 rounded-full" />
-                    <h3 className="text-lg font-semibold text-slate-800">Documentos Obligatorios</h3>
+        <div className="space-y-10">
+            {/* Alerta de seguridad social */}
+            {requiereSeguridadSocial && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                        <ShieldAlert className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                            <p className="text-sm font-semibold text-amber-800">
+                                Documentos adicionales requeridos
+                            </p>
+                            <p className="text-xs text-amber-700 mt-1">
+                                Debido a que su acumulado mensual supera el umbral, debe adjuntar la
+                                Planilla de Seguridad Social y el Informe de Actividades de forma obligatoria.
+                            </p>
+                        </div>
+                    </div>
                 </div>
-                <div className="grid gap-4">
+            )}
+
+            {/* Seccion Obligatorios */}
+            <section>
+                <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center">
+                        <AlertCircle className="w-5 h-5 text-destructive" />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-semibold text-foreground">Documentos Obligatorios</h3>
+                        <p className="text-sm text-muted-foreground">Estos documentos son requeridos para la radicacion</p>
+                    </div>
+                </div>
+                <div className="space-y-3">
                     {obligatorios.map(tipo => (
                         <AnexoRow
                             key={tipo.id}
@@ -35,29 +68,41 @@ export const AnexosPanel = ({ anexos, tipos, onUpload, onDelete, readOnly }: Ane
                             readOnly={readOnly}
                         />
                     ))}
-                    {obligatorios.length === 0 && <p className="text-muted-foreground text-sm">No hay documentos obligatorios.</p>}
+                    {obligatorios.length === 0 && (
+                        <div className="text-center py-8 text-muted-foreground">
+                            <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">No hay documentos obligatorios configurados.</p>
+                        </div>
+                    )}
                 </div>
             </section>
 
-            <section>
-                <div className="flex items-center gap-2 mb-4">
-                    <div className="w-1 h-6 bg-blue-500 rounded-full" />
-                    <h3 className="text-lg font-semibold text-slate-800">Documentos Opcionales</h3>
-                </div>
-                <div className="grid gap-4">
-                    {opcionales.map(tipo => (
-                        <AnexoRow
-                            key={tipo.id}
-                            tipo={tipo}
-                            anexo={anexos.find(a => a.tipo.id === tipo.id)}
-                            onUpload={onUpload}
-                            onDelete={onDelete}
-                            readOnly={readOnly}
-                        />
-                    ))}
-                    {opcionales.length === 0 && <p className="text-muted-foreground text-sm">No hay documentos opcionales.</p>}
-                </div>
-            </section>
+            {/* Seccion Opcionales */}
+            {opcionales.length > 0 && (
+                <section>
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="w-10 h-10 rounded-xl bg-info/10 flex items-center justify-center">
+                            <FileText className="w-5 h-5 text-info" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-semibold text-foreground">Documentos Opcionales</h3>
+                            <p className="text-sm text-muted-foreground">Soporte adicional para su radicacion</p>
+                        </div>
+                    </div>
+                    <div className="space-y-3">
+                        {opcionales.map(tipo => (
+                            <AnexoRow
+                                key={tipo.id}
+                                tipo={tipo}
+                                anexo={anexos.find(a => a.tipo.id === tipo.id)}
+                                onUpload={onUpload}
+                                onDelete={onDelete}
+                                readOnly={readOnly}
+                            />
+                        ))}
+                    </div>
+                </section>
+            )}
         </div>
     );
 };
@@ -107,50 +152,63 @@ const AnexoRow = ({
 
     return (
         <div className={cn(
-            "p-4 rounded-xl border flex items-center justify-between transition-all",
-            anexo
-                ? "bg-green-50/50 border-green-200"
-                : "bg-white border-slate-200 hover:border-slate-300"
+            "document-row",
+            anexo && "completed"
         )}>
             <div className="flex items-center gap-4">
                 <div className={cn(
-                    "w-10 h-10 rounded-full flex items-center justify-center shrink-0",
-                    anexo ? "bg-green-100 text-green-600" : "bg-slate-100 text-slate-400"
+                    "document-icon",
+                    anexo ? "completed" : "pending"
                 )}>
-                    {anexo ? <CheckCircle2 className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+                    {anexo ? (
+                        <CheckCircle2 className="w-5 h-5" />
+                    ) : (
+                        <FileText className="w-5 h-5" />
+                    )}
                 </div>
-                <div>
-                    <h4 className={cn("font-medium", anexo ? "text-green-900" : "text-slate-700")}>
+                <div className="min-w-0 flex-1">
+                    <h4 className={cn(
+                        "font-medium truncate",
+                        anexo ? "text-success" : "text-foreground"
+                    )}>
                         {tipo.nombre}
                     </h4>
                     {anexo ? (
                         <a
-                            href={anexo.archivo}
+                            href={`http://localhost:8000${anexo.archivo}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs text-green-600 hover:underline flex items-center gap-1"
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                         >
+                            <ExternalLink className="w-3 h-3" />
                             Ver archivo cargado
                         </a>
                     ) : (
                         <p className="text-xs text-muted-foreground">
-                            {tipo.descripcion || "Formato PDF o Imagen max 5MB"}
+                            Formato PDF o Imagen, max. 5MB
                         </p>
                     )}
                 </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 ml-4">
                 {anexo ? (
                     !readOnly && (
                         <Button
                             variant="ghost"
-                            size="icon"
+                            size="sm"
                             onClick={handleDelete}
                             disabled={loading}
-                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10 h-9 px-3"
                         >
-                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                            {loading ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <>
+                                    <Trash2 className="w-4 h-4 mr-1" />
+                                    Eliminar
+                                </>
+                            )}
                         </Button>
                     )
                 ) : (
@@ -168,14 +226,16 @@ const AnexoRow = ({
                                 size="sm"
                                 onClick={() => fileInputRef.current?.click()}
                                 disabled={loading}
-                                className="gap-2"
+                                className="h-9 px-4 border-primary/20 hover:bg-primary/5 hover:border-primary/40"
                             >
                                 {loading ? (
                                     <Loader2 className="w-4 h-4 animate-spin" />
                                 ) : (
-                                    <Upload className="w-4 h-4" />
+                                    <>
+                                        <Upload className="w-4 h-4 mr-2" />
+                                        Subir Archivo
+                                    </>
                                 )}
-                                Subir
                             </Button>
                         </>
                     )

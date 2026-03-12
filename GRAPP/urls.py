@@ -22,13 +22,18 @@ from terceros.views import formulario_vinculacion
 from proveedores.views import radicar_cuenta
 
 # API views
-from terceros.api_views import vinculacion_api, upload_documento, bulk_upload_documentos, tercero_status, get_tercero_detail, get_documentos_requeridos_filtrados
+from terceros.api_views import vinculacion_api, upload_documento, bulk_upload_documentos, tercero_status, get_tercero_detail, get_documentos_requeridos_filtrados, activar_cuenta_tercero, auth_me
+from terceros.admin_api import admin_stats, admin_terceros_list, admin_cuentas_list
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
 from terceros.viewsets import (
     EstudioViewSet, CursoViewSet, CertificacionViewSet,
     ExperienciaLaboralViewSet, TerceroIdiomaViewSet,
     SeguridadSocialView, IdiomaListView, TerceroTagsView
 )
-from proveedores.api_views import radicacion_api
+# from proveedores.api_views import radicacion_api # Obsoleto: Portal de terceros
 from proveedores.wizard_viewsets import CuentaCobroWizardViewSet, TipoAnexoViewSet
 
 from django.conf import settings
@@ -47,7 +52,7 @@ urlpatterns = [
     
     # API endpoints (nuevos para React)
     path("api/vinculacion/<str:token>/", vinculacion_api, name="vinculacion_api"),
-    path("api/radicacion/<str:token>/", radicacion_api, name="radicacion_api"),
+    # path("api/radicacion/<str:token>/", radicacion_api, name="radicacion_api"), # Obsoleto: reemplazado por NuevaRadicacion
     
     # Document upload endpoints
     path("api/terceros/<int:tercero_id>/documentos/<str:documento_tipo_code>/upload", 
@@ -68,7 +73,20 @@ urlpatterns = [
     path("api/vinculacion/<str:token>/documentos/",
          get_documentos_requeridos_filtrados, name="documentos_filtrados"),
 
-    
+    # Activación de cuenta para terceros
+    path("api/auth/activar/<str:token>/",
+         activar_cuenta_tercero, name="activar_cuenta_tercero"),
+         
+    # JWT Authentication Endpoints
+    path('api/auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/auth/me/', auth_me, name='auth_me'),
+
+    # Admin API endpoints
+    path('api/admin/stats/', admin_stats, name='admin_stats'),
+    path('api/admin/terceros/', admin_terceros_list, name='admin_terceros_list'),
+    path('api/admin/cuentas/', admin_cuentas_list, name='admin_cuentas_list'),
+
     # Profile CRUD endpoints - Estudios
     path("api/terceros/<int:tercero_id>/estudios/", 
          EstudioViewSet.as_view({'get': 'list', 'post': 'create'}), name="tercero_estudios"),

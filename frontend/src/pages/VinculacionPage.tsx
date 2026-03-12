@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Building2, Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { VinculacionTercerosForm } from '@/components/forms/VinculacionTercerosForm';
 import { vinculacionAPI } from '@/lib/api';
 import { DocumentoRequerido } from '@/components/forms/DocumentosRequeridos';
+import { Navbar } from '@/components/Navbar';
 
 interface InvitacionData {
     email: string;
@@ -135,24 +136,7 @@ const VinculacionPage = () => {
     // Formulario
     return (
         <div className="min-h-screen bg-background">
-            <header className="border-b border-border bg-card sticky top-0 z-10">
-                <div className="container mx-auto px-4 py-4">
-                    <div className="flex items-center justify-between">
-                        <button
-                            onClick={() => navigate('/')}
-                            className="flex items-center gap-3 hover:opacity-80 transition-opacity"
-                        >
-                            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-                                <Building2 className="w-5 h-5 text-primary-foreground" />
-                            </div>
-                            <span className="text-xl font-semibold text-foreground">GRAPP</span>
-                        </button>
-                        <span className="text-sm text-muted-foreground">
-                            Vinculación de Terceros
-                        </span>
-                    </div>
-                </div>
-            </header>
+            <Navbar subtitle="Vinculación de Terceros" />
 
             <main className="container mx-auto px-4 py-8 max-w-3xl">
                 <div className="mb-8">

@@ -1,15 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Building2, Loader2, AlertCircle, User, FileText, Briefcase, Check } from 'lucide-react';
+import { Loader2, AlertCircle, User, FileText, Briefcase, Check, Paperclip } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { vinculacionAPI, terceroAPI } from '@/lib/api';
 import { DocumentoRequerido } from '@/components/forms/DocumentosRequeridos';
+import { Navbar } from '@/components/Navbar';
 
 // Tab Components
 import DatosBasicosTab from '@/components/wizard/DatosBasicosTab';
 import DocumentosTab from '@/components/wizard/DocumentosTab';
 import PerfilTab from '@/components/wizard/PerfilTab';
+import SoportesTab from '@/components/wizard/SoportesTab';
 
 // Tipo de datos de la invitación
 interface InvitacionData {
@@ -185,6 +187,14 @@ const VinculacionWizardPage = () => {
             baseTabs.push({ id: 'perfil', label: 'Información Adicional', icon: Briefcase });
         }
 
+        const requiresSoportes = ['CONTRATISTA', 'ASPIRANTE'].includes(
+            invitacionData.tipo_tercero.code
+        );
+
+        if (requiresSoportes) {
+            baseTabs.push({ id: 'soportes', label: 'Soportes', icon: Paperclip });
+        }
+
         return baseTabs;
     }, [invitacionData]);
 
@@ -199,22 +209,42 @@ const VinculacionWizardPage = () => {
         if (!terceroId || !status?.puede_enviar_aprobacion) return;
 
         try {
+            // Cargar los datos completos del tercero desde el backend
+            const terceroData = await terceroAPI.get(terceroId);
+
+            // Navegar a la página de éxito con los datos del tercero
             navigate('/success/vinculacion', {
                 state: {
-                    message: 'Su solicitud ha sido enviada para aprobación'
+                    terceroData: {
+                        nombre: terceroData.nombre_completo || terceroData.razon_social || 'Tercero',
+                        documento: terceroData.numero_documento || terceroData.documento || '-',
+                        email: terceroData.email || invitacionData?.email || '',
+                        tipo_persona: terceroData.tipo_persona
+                    }
                 }
             });
         } catch (error) {
             console.error('Error al enviar para aprobación:', error);
+            // En caso de error, navegar con los datos básicos disponibles
+            navigate('/success/vinculacion', {
+                state: {
+                    terceroData: {
+                        nombre: 'Tercero',
+                        documento: '-',
+                        email: invitacionData?.email || '',
+                        tipo_persona: tipoPersona
+                    }
+                }
+            });
         }
     };
 
-    // Verificar si un tab está completado
     const isTabCompleted = (tabId: string) => {
         if (!terceroId) return false;
         if (tabId === 'datos-basicos') return true;
         if (tabId === 'documentos') return status?.documentos.completo || false;
         if (tabId === 'perfil') return status?.perfil.completo || false;
+        if (tabId === 'soportes') return false; // Soportes se considera un paso adicional que podría completarse opcionalmente.
         return false;
     };
 
@@ -258,25 +288,8 @@ const VinculacionWizardPage = () => {
     // Wizard principal
     return (
         <div className="min-h-screen bg-background">
-            {/* Header - Idéntico a VinculacionPage */}
-            <header className="border-b border-border bg-card sticky top-0 z-10">
-                <div className="container mx-auto px-4 py-4">
-                    <div className="flex items-center justify-between">
-                        <button
-                            onClick={() => navigate('/')}
-                            className="flex items-center gap-3 hover:opacity-80 transition-opacity"
-                        >
-                            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-                                <Building2 className="w-5 h-5 text-primary-foreground" />
-                            </div>
-                            <span className="text-xl font-semibold text-foreground">GRAPP</span>
-                        </button>
-                        <span className="text-sm text-muted-foreground">
-                            Vinculación de Terceros
-                        </span>
-                    </div>
-                </div>
-            </header>
+            {/* Navbar con logo de Experias */}
+            <Navbar subtitle="Vinculación de Terceros" />
 
             {/* Main - max-w-3xl como VinculacionPage */}
             <main className="container mx-auto px-4 py-8 max-w-3xl">
@@ -391,6 +404,24 @@ const VinculacionWizardPage = () => {
                                     terceroId={terceroId}
                                     tipoTercero={invitacionData.tipo_tercero.code}
                                     onUpdate={refreshStatus}
+                                />
+                            ) : (
+                                <div className="bg-card border border-border rounded-xl p-8 text-center">
+                                    <p className="text-muted-foreground">
+                                        Complete primero los datos básicos para continuar.
+                                    </p>
+                                </div>
+                            )}
+                        </TabsContent>
+                    )}
+
+                    {tabs.find(t => t.id === 'soportes') && (
+                        <TabsContent value="soportes" className="mt-0">
+                            {terceroId ? (
+                                <SoportesTab
+                                    terceroId={terceroId}
+                                    token={token!}
+                                    onComplete={refreshStatus}
                                 />
                             ) : (
                                 <div className="bg-card border border-border rounded-xl p-8 text-center">

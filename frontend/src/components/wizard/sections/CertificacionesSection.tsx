@@ -3,6 +3,8 @@ import { Award, Plus, Pencil, Trash2, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { AppAlert } from '@/components/ui/app-alert';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { terceroAPI } from '@/lib/api';
 
 interface Certificacion {
@@ -24,6 +26,8 @@ export default function CertificacionesSection({ terceroId, onUpdate }: Certific
     const [showForm, setShowForm] = useState(false);
     const [editItem, setEditItem] = useState<Certificacion | null>(null);
     const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [confirmId, setConfirmId] = useState<number | null>(null);
     const [formData, setFormData] = useState({
         nombre: '',
         fabricante: '',
@@ -58,6 +62,7 @@ export default function CertificacionesSection({ terceroId, onUpdate }: Certific
 
     const handleAdd = () => {
         setEditItem(null);
+        setError(null);
         setFormData({ nombre: '', fabricante: '', fecha: '' });
         setShowForm(true);
     };
@@ -65,43 +70,55 @@ export default function CertificacionesSection({ terceroId, onUpdate }: Certific
     const handleCancel = () => {
         setShowForm(false);
         setEditItem(null);
+        setError(null);
         setFormData({ nombre: '', fabricante: '', fecha: '' });
     };
 
     const handleSave = async () => {
         if (!formData.nombre || !formData.fabricante) {
-            alert('Complete los campos obligatorios');
+            setError('Complete los campos obligatorios');
             return;
         }
 
         setSaving(true);
+        setError(null);
         try {
+            const payload = {
+                ...formData,
+                fecha: formData.fecha || null,
+            };
+
             if (editItem) {
-                await terceroAPI.certificaciones.update(terceroId, editItem.id, formData);
+                await terceroAPI.certificaciones.update(terceroId, editItem.id, payload);
             } else {
-                await terceroAPI.certificaciones.create(terceroId, formData);
+                await terceroAPI.certificaciones.create(terceroId, payload);
             }
             await loadCertificaciones();
             onUpdate?.();
             handleCancel();
         } catch (error) {
             console.error('Error saving certificacion:', error);
-            alert('Error al guardar la certificación');
+            setError('Error al guardar la certificación');
         } finally {
             setSaving(false);
         }
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm('¿Está seguro de eliminar esta certificación?')) return;
+        setConfirmId(id);
+    };
 
+    const confirmDelete = async () => {
+        if (confirmId === null) return;
+        const id = confirmId;
+        setConfirmId(null);
         try {
             await terceroAPI.certificaciones.delete(terceroId, id);
             await loadCertificaciones();
             onUpdate?.();
         } catch (error) {
             console.error('Error deleting certificacion:', error);
-            alert('Error al eliminar la certificación');
+            setError('Error al eliminar la certificación');
         }
     };
 
@@ -119,6 +136,17 @@ export default function CertificacionesSection({ terceroId, onUpdate }: Certific
                     </Button>
                 )}
             </div>
+
+            <ConfirmDialog
+                open={confirmId !== null}
+                description="¿Está seguro de eliminar esta certificación? Esta acción no se puede deshacer."
+                onConfirm={confirmDelete}
+                onCancel={() => setConfirmId(null)}
+            />
+
+            {error && !showForm && (
+                <AppAlert type="error" description={error} className="mb-4" />
+            )}
 
             {loading ? (
                 <div className="flex justify-center py-8">
@@ -170,13 +198,17 @@ export default function CertificacionesSection({ terceroId, onUpdate }: Certific
                                 </Button>
                             </div>
 
+                            {error && (
+                                <AppAlert type="error" description={error} className="mb-4" />
+                            )}
+
                             <div className="space-y-4">
                                 <div>
                                     <Label>Nombre de la Certificación *</Label>
                                     <Input
                                         value={formData.nombre}
                                         onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                                        placeholder="Ej: AWS Certified Solutions Architect"
+                                        placeholder="Ej: Certificación en Excel Avanzado"
                                     />
                                 </div>
 
@@ -185,7 +217,7 @@ export default function CertificacionesSection({ terceroId, onUpdate }: Certific
                                     <Input
                                         value={formData.fabricante}
                                         onChange={(e) => setFormData({ ...formData, fabricante: e.target.value })}
-                                        placeholder="Ej: Amazon Web Services, Microsoft, Google..."
+                                        placeholder="Ej: SENA, ICONTEC o entidad certificadora.."
                                     />
                                 </div>
 

@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # Third party
     'rest_framework',
+    'rest_framework_simplejwt',
     'corsheaders',
     # Apps del proyecto
     'tenancy',
@@ -86,12 +87,61 @@ WSGI_APPLICATION = 'GRAPP.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+import os
+import sys
+from dotenv import load_dotenv
+
+# CRÍTICO: Establecer codificación ANTES de cargar cualquier módulo de PostgreSQL
+# Esto previene el UnicodeDecodeError cuando psycopg2 lee archivos de configuración del sistema
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+os.environ['LANG'] = 'en_US.UTF-8'
+os.environ['LC_ALL'] = 'en_US.UTF-8'
+
+# Cargar variables de entorno desde .env
+load_dotenv()
+
+# Forzar codificación UTF-8 y deshabilitar archivos de configuración de PostgreSQL
+# para evitar UnicodeDecodeError con archivos del sistema mal codificados
+os.environ['PGCLIENTENCODING'] = 'UTF8'
+os.environ['PGSYSCONFDIR'] = ''  # Deshabilitar pg_service.conf del sistema
+os.environ['PGSSLMODE'] = 'disable'  # Deshabilitar SSL para evitar problemas de certificados
+
+# Configuración dual: SQLite (desarrollo) o PostgreSQL (producción)
+DB_ENGINE = os.getenv('DB_ENGINE', 'postgres')  # 'sqlite' o 'postgres'
+
+if DB_ENGINE == 'postgres':
+    # Usar cadena de conexión DSN completa para evitar que psycopg2
+    # lea archivos de configuración del sistema con codificación incorrecta
+    db_name = os.getenv('DB_NAME', 'grapp')
+    db_user = os.getenv('DB_USER', 'postgres')
+    db_password = os.getenv('DB_PASSWORD', 'postgres')
+    db_host = os.getenv('DB_HOST', 'localhost')
+    db_port = os.getenv('DB_PORT', '5432')
+    
+    # Construir DSN con codificación explícita
+    dsn = f"host={db_host} port={db_port} dbname={db_name} user={db_user} password={db_password} client_encoding=UTF8"
+    
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': db_name,
+            'USER': db_user,
+            'PASSWORD': db_password,
+            'HOST': db_host,
+            'PORT': db_port,
+            'OPTIONS': {
+                'client_encoding': 'UTF8',
+            },
+        }
     }
-}
+else:
+    # SQLite (por defecto)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -116,7 +166,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'es'
 
 TIME_ZONE = 'UTC'
 
@@ -132,6 +182,9 @@ STATIC_URL = 'static/'
 
 # Django REST Framework
 REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
         'rest_framework.parsers.MultiPartParser',
@@ -139,8 +192,37 @@ REST_FRAMEWORK = {
     ],
 }
 
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}
+
 # CORS Configuration
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Vite dev server
 ]
 CORS_ALLOW_CREDENTIALS = True
+
+# -------------------------------------------------------
+# Email
+# En desarrollo usa el backend de consola (imprime en terminal).
+# En producción configura las variables de entorno SMTP.
+# -------------------------------------------------------
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend"
+)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "GRAPP <noreply@grapp.app>")
+
+# URL base del frontend (usada en correos de activación)
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")

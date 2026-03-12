@@ -1,11 +1,27 @@
 import { apiClient } from '@/lib/api';
 
+export interface ReglasSegSocial {
+    aplica: boolean;
+    requiere_ss: boolean;
+    acumulado_mensual: number;
+    valor_actual?: number;
+    total_proyectado?: number;
+    umbral: number;
+    salario_minimo?: number;
+    porcentaje_umbral?: number;
+    porcentaje_minimo_ibc: number;
+}
+
 export interface WizardEstado {
     id: number;
-    estado: 'BORRADOR' | 'RADICADA';
+    estado: 'BORRADOR' | 'RADICADA' | 'EN_REVISION' | 'APROBADA' | 'RECHAZADA' | 'PAGADA';
     step1_ok: boolean;
     step2_ok: boolean;
     anexos_ok: boolean;
+    tipo_documento: 'CUENTA_COBRO' | 'FACTURA';
+    tipo_persona: 'NATURAL' | 'JURIDICA';
+    empresa_nombre?: string;
+    proveedor_nombre?: string;
     contrato?: number | null;
     contrato_numero?: string | null;
     contrato_detalle?: {
@@ -21,27 +37,45 @@ export interface WizardEstado {
         periodo: string;
         concepto: string;
         observaciones?: string;
+        mes_servicio_date?: string | null;
     };
     datos_financieros: {
         valor_base: number;
+        iva_porcentaje: number;
         iva_valor: number;
         admon: number;
         imprevistos: number;
         utilidad: number;
-        valor_total: number; // Read only
+        valor_total: number;
+        ibc_valor: number;
     };
+    reglas_seguridad_social: ReglasSegSocial;
+    proveedor_responsable_iva: boolean | null;
+    proveedor_regimen_tributario: string | null;
+    proveedor_agente_retenedor: boolean | null;
     anexos_count: number;
+    comprobantes?: ComprobantePago[];
+}
+
+export interface ComprobantePago {
+    id: number;
+    archivo: string;
+    fecha_pago: string;
+    valor_pagado: number;
+    referencia: string | null;
+    created_at: string;
 }
 
 export interface Anexo {
     id: number;
-    archivo: string; // URL
+    archivo: string;
     nombre_archivo: string;
     tipo: {
         id: number;
         nombre: string;
         obligatorio: boolean;
         codigo: string;
+        aplica_a_persona?: string;
     };
     fecha_subida: string;
 }
@@ -51,14 +85,16 @@ export interface TipoAnexo {
     nombre: string;
     obligatorio: boolean;
     codigo: string;
+    aplica_a_persona?: string;
     descripcion?: string;
 }
 
 export const wizardApi = {
-    // 1. Crear borrador (o recuperar si ya existe backend side logic?) - The prompt says create with token via POST
-    createBorrador: async (token: string) => {
-        const { data } = await apiClient.post('/api/cuentas-cobro/wizard/', { token });
-        return data; // Should return { wizardId: number, ... }
+    // 1. Crear borrador (o recuperar existente de la sesion autenticada)
+    createBorrador: async (token?: string) => {
+        const payload = token ? { token } : {};
+        const { data } = await apiClient.post('/api/cuentas-cobro/wizard/', payload);
+        return data;
     },
 
     // 2. Obtener estado completo
@@ -120,9 +156,15 @@ export const wizardApi = {
         return data;
     },
 
-    // 9. Catálogo de tipos de anexo
+    // 9. Catalogo de tipos de anexo (general)
     getTiposAnexo: async () => {
         const { data } = await apiClient.get<TipoAnexo[]>('/api/tipos-anexo/');
         return data;
-    }
+    },
+
+    // 10. Tipos de anexo filtrados para una cuenta especifica (dinamico)
+    getTiposAnexoFiltrados: async (id: number) => {
+        const { data } = await apiClient.get<TipoAnexo[]>(`/api/cuentas-cobro/${id}/tipos-anexo/`);
+        return data;
+    },
 };

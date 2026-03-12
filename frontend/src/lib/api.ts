@@ -8,6 +8,18 @@ export const apiClient = axios.create({
     withCredentials: true,
 });
 
+// Interceptor para incluir el token JWT en cada petición
+apiClient.interceptors.request.use(
+    (config) => {
+        const token = localStorage.getItem('grapp_access_token');
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+    },
+    (error) => Promise.reject(error)
+);
+
 // Interceptor para manejar errores
 apiClient.interceptors.response.use(
     (response) => response,
@@ -43,7 +55,7 @@ export const vinculacionAPI = {
         tipoPersona: "NATURAL" | "JURIDICA"
     ) => {
         const { data } = await apiClient.get(
-            `/api/vinculacion/${token}/documentos/`, 
+            `/api/vinculacion/${token}/documentos/`,
             { params: { tipo_persona: tipoPersona } } //  axios arma el querystring
         );
         return data;
@@ -111,6 +123,18 @@ export const terceroAPI = {
     // Get full detail (persistence)
     get: async (terceroId: number) => {
         const { data } = await apiClient.get(`/api/terceros/${terceroId}/`);
+        return data;
+    },
+
+    // Subir archivo "soporte" a un modelo dependiente específico (estudios, cursos, etc)
+    uploadSoporte: async (terceroId: number, model: string, itemId: number, file: File) => {
+        const formData = new FormData();
+        formData.append('soporte', file);
+        const { data } = await apiClient.patch(
+            `/api/terceros/${terceroId}/${model}/${itemId}/`,
+            formData,
+            { headers: { 'Content-Type': 'multipart/form-data' } }
+        );
         return data;
     },
 

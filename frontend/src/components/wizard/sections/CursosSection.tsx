@@ -3,6 +3,8 @@ import { BookOpen, Plus, Pencil, Trash2, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { AppAlert } from '@/components/ui/app-alert';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { terceroAPI } from '@/lib/api';
 
 interface Curso {
@@ -24,6 +26,8 @@ export default function CursosSection({ terceroId, onUpdate }: CursosSectionProp
     const [showForm, setShowForm] = useState(false);
     const [editItem, setEditItem] = useState<Curso | null>(null);
     const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [confirmId, setConfirmId] = useState<number | null>(null);
     const [formData, setFormData] = useState({
         nombre: '',
         entidad: '',
@@ -58,6 +62,7 @@ export default function CursosSection({ terceroId, onUpdate }: CursosSectionProp
 
     const handleAdd = () => {
         setEditItem(null);
+        setError(null);
         setFormData({ nombre: '', entidad: '', horas: '' });
         setShowForm(true);
     };
@@ -65,16 +70,18 @@ export default function CursosSection({ terceroId, onUpdate }: CursosSectionProp
     const handleCancel = () => {
         setShowForm(false);
         setEditItem(null);
+        setError(null);
         setFormData({ nombre: '', entidad: '', horas: '' });
     };
 
     const handleSave = async () => {
         if (!formData.nombre || !formData.entidad) {
-            alert('Complete los campos obligatorios');
+            setError('Complete los campos obligatorios');
             return;
         }
 
         setSaving(true);
+        setError(null);
         try {
             const payload = {
                 nombre: formData.nombre,
@@ -92,22 +99,27 @@ export default function CursosSection({ terceroId, onUpdate }: CursosSectionProp
             handleCancel();
         } catch (error) {
             console.error('Error saving curso:', error);
-            alert('Error al guardar el curso');
+            setError('Error al guardar el curso');
         } finally {
             setSaving(false);
         }
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm('¿Está seguro de eliminar este curso?')) return;
+        setConfirmId(id);
+    };
 
+    const confirmDelete = async () => {
+        if (confirmId === null) return;
+        const id = confirmId;
+        setConfirmId(null);
         try {
             await terceroAPI.cursos.delete(terceroId, id);
             await loadCursos();
             onUpdate?.();
         } catch (error) {
             console.error('Error deleting curso:', error);
-            alert('Error al eliminar el curso');
+            setError('Error al eliminar el curso');
         }
     };
 
@@ -125,6 +137,17 @@ export default function CursosSection({ terceroId, onUpdate }: CursosSectionProp
                     </Button>
                 )}
             </div>
+
+            <ConfirmDialog
+                open={confirmId !== null}
+                description="¿Está seguro de eliminar este curso? Esta acción no se puede deshacer."
+                onConfirm={confirmDelete}
+                onCancel={() => setConfirmId(null)}
+            />
+
+            {error && !showForm && (
+                <AppAlert type="error" description={error} className="mb-4" />
+            )}
 
             {loading ? (
                 <div className="flex justify-center py-8">
@@ -174,13 +197,17 @@ export default function CursosSection({ terceroId, onUpdate }: CursosSectionProp
                                 </Button>
                             </div>
 
+                            {error && (
+                                <AppAlert type="error" description={error} className="mb-4" />
+                            )}
+
                             <div className="space-y-4">
                                 <div>
                                     <Label>Nombre del Curso *</Label>
                                     <Input
                                         value={formData.nombre}
                                         onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                                        placeholder="Ej: Curso de React Avanzado"
+                                        placeholder="Ej: Seguridad y Salud en el Trabajo"
                                     />
                                 </div>
 
@@ -189,7 +216,7 @@ export default function CursosSection({ terceroId, onUpdate }: CursosSectionProp
                                     <Input
                                         value={formData.entidad}
                                         onChange={(e) => setFormData({ ...formData, entidad: e.target.value })}
-                                        placeholder="Ej: Platzi, Coursera, Universidad..."
+                                        placeholder="Ej: SENA, Universidad del Valle, Instituto Gran Colombia..."
                                     />
                                 </div>
 
@@ -205,7 +232,7 @@ export default function CursosSection({ terceroId, onUpdate }: CursosSectionProp
 
                                 <div className="flex justify-end gap-2 pt-4">
                                     <Button variant="outline" onClick={handleCancel}>
-                                        Cancel ar
+                                        Cancelar
                                     </Button>
                                     <Button onClick={handleSave} disabled={saving}>
                                         {saving ? (

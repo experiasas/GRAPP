@@ -291,10 +291,10 @@ def get_tercero_detail(request, tercero_id):
     Returns basic details of the Tercero for form persistence.
     """
     from .models import Tercero
-    from .serializers import TerceroCreateSerializer
+    from .serializers import TerceroDetailSerializer
 
     tercero = get_object_or_404(Tercero, id=tercero_id)
-    serializer = TerceroCreateSerializer(tercero)
+    serializer = TerceroDetailSerializer(tercero)
     return Response(serializer.data)
 
 
@@ -341,3 +341,97 @@ def get_documentos_requeridos_filtrados(request, token):
     serializer = DocumentoRequeridoSerializer(documentos, many=True)
     return Response(serializer.data)
 
+
+@csrf_exempt
+@api_view(['GET', 'POST'])
+def activar_cuenta_tercero(request, token):
+    """
+    GET: Valida el token y retorna el email del usuario correspondiente.
+    POST: Recibe { password: '...' }, establece contraseña y activa cuenta.
+    """
+    from .models import TokenActivacionTercero
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    
+    token_obj = get_object_or_404(TokenActivacionTercero, token=token)
+    
+    if not token_obj.is_valid():
+        return Response({
+            'message': 'El enlace de activación ha expirado.',
+            'code': 'TOKEN_EXPIRADO'
+        }, status=status.HTTP_400_BAD_REQUEST)
+        
+    usuario = token_obj.usuario
+    
+    if request.method == 'GET':
+        return Response({
+            'email': usuario.email,
+            'valido': True
+        })
+        
+    elif request.method == 'POST':
+        password = request.data.get('password')
+        if not password or len(password) < 6:
+            return Response({
+                'message': 'La contraseña debe tener al menos 6 caracteres.',
+                'code': 'PASSWORD_INVALIDO'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            with transaction.atomic():
+                usuario.set_password(password)
+                usuario.is_active = True
+                usuario.save()
+                
+                # Quemar el token para que no se re-use
+                token_obj.delete()
+                
+            return Response({
+                'message': 'Cuenta activada exitosamente. Ya puede iniciar sesión.',
+                'success': True
+            })
+        except Exception as e:
+            logger.error(f"Error activando cuenta con token {token}: {str(e)}", exc_info=True)
+            return Response({
+                'message': 'Error interno al activar la cuenta.',
+                'code': 'ERROR_ACTIVACION',
+                'detail': str(e) if settings.DEBUG else None
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+from rest_framework.permissions import IsAuthenticated
+
+@api_view(['GET'])
+def auth_me(request):
+    """
+    GET /api/auth/me/
+    Retorna el perfil del usuario autenticado y su ID de tercero si existe.
+    """
+    from .models import Tercero
+    
+    # Se espera que funcione con JWTAuthentication
+    if not request.user.is_authenticated:
+        return Response({'detail': 'No autenticado.'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+    user = request.user
+    
+    # Buscar si tiene un tercero asociado
+    tercero_id = None
+    if hasattr(user, 'tercero_perfil'):
+        tercero_id = user.tercero_perfil.id
+    else:
+        # Fallback por si la relación OneToOne no está seteada pero el email coincide
+        tercero = Tercero.objects.filter(email=user.email).first()
+        if tercero:
+            tercero_id = tercero.id
+            # Auto-vincular
+            if not tercero.usuario:
+                tercero.usuario = user
+                tercero.save()
+
+    return Response({
+        'id': user.id,
+        'email': user.email,
+        'username': user.username,
+        'tercero_id': tercero_id,
+        'is_staff': user.is_staff,
+    })

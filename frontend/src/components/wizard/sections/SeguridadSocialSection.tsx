@@ -3,6 +3,7 @@ import { Shield, Save, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { AppAlert } from '@/components/ui/app-alert';
 import { terceroAPI } from '@/lib/api';
 
 interface SeguridadSocial {
@@ -21,6 +22,8 @@ interface SeguridadSocialSectionProps {
 export default function SeguridadSocialSection({ terceroId, onUpdate }: SeguridadSocialSectionProps) {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
     const [formData, setFormData] = useState({
         eps: '',
         arl: '',
@@ -49,13 +52,15 @@ export default function SeguridadSocialSection({ terceroId, onUpdate }: Segurida
 
     const handleSave = async () => {
         setSaving(true);
+        setError(null);
+        setSuccess(null);
         try {
             await terceroAPI.seguridadSocial.save(terceroId, formData);
             onUpdate?.();
-            alert('Información de seguridad social guardada exitosamente');
+            setSuccess('Información de seguridad social guardada exitosamente');
         } catch (error) {
             console.error('Error saving seguridad social:', error);
-            alert('Error al guardar la información');
+            setError('Error al guardar la información');
         } finally {
             setSaving(false);
         }
@@ -82,6 +87,14 @@ export default function SeguridadSocialSection({ terceroId, onUpdate }: Segurida
                     Información de afiliación a entidades de seguridad social
                 </p>
             </div>
+
+            {error && (
+                <AppAlert type="error" description={error} className="mb-6" />
+            )}
+
+            {success && (
+                <AppAlert type="success" title="Guardado" description={success} className="mb-6" />
+            )}
 
             <div className="space-y-4">
                 <div>

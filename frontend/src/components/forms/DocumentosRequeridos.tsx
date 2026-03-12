@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { FileText, Upload, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -20,14 +20,28 @@ interface DocumentosRequeridosProps {
     documentos: DocumentoRequerido[];
     onChange: (files: Record<string, File>) => void;
     uploadStatus?: Record<string, DocumentoUploadStatus>;
+    resetTrigger?: number; // Cambia este valor para forzar reset
 }
 
 export function DocumentosRequeridos({
     documentos,
     onChange,
-    uploadStatus
+    uploadStatus,
+    resetTrigger
 }: DocumentosRequeridosProps) {
     const [selectedFiles, setSelectedFiles] = useState<Record<string, File>>({});
+    const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+    // Detectar cuando el padre quiere resetear (botón "Limpiar Selección" o después de subir)
+    useEffect(() => {
+        if (resetTrigger !== undefined && resetTrigger > 0) {
+            setSelectedFiles({});
+            // Limpiar todos los inputs de archivo
+            Object.values(inputRefs.current).forEach(input => {
+                if (input) input.value = '';
+            });
+        }
+    }, [resetTrigger]);
 
     const handleFileChange = (code: string, file: File | null) => {
         const newFiles = { ...selectedFiles };
@@ -93,6 +107,7 @@ export function DocumentosRequeridos({
                             type="file"
                             accept=".pdf,.jpg,.jpeg,.png"
                             disabled={isDisabled}
+                            ref={(el) => { inputRefs.current[doc.documento_tipo_code] = el; }}
                             onChange={(e) => {
                                 const file = e.target.files?.[0] || null;
                                 handleFileChange(doc.documento_tipo_code, file);
@@ -149,7 +164,7 @@ export function DocumentosRequeridos({
             {opcionales.length > 0 && (
                 <div className="space-y-4">
                     <h4 className="text-sm font-medium text-muted-foreground">
-                        Documentos Opcionales
+                        {/* Documentos */}
                     </h4>
                     <div className="space-y-3">
                         {opcionales.map(renderDocumento)}

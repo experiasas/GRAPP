@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Languages, Plus, Pencil, Trash2, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { AppAlert } from '@/components/ui/app-alert';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
     Select,
     SelectContent,
@@ -42,6 +44,8 @@ export default function IdiomasSection({ terceroId, onUpdate }: IdiomasSectionPr
     const [showForm, setShowForm] = useState(false);
     const [editItem, setEditItem] = useState<TerceroIdioma | null>(null);
     const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [confirmId, setConfirmId] = useState<number | null>(null);
     const [formData, setFormData] = useState({
         idioma_code: '',
         nivel: '',
@@ -78,6 +82,7 @@ export default function IdiomasSection({ terceroId, onUpdate }: IdiomasSectionPr
 
     const handleAdd = () => {
         setEditItem(null);
+        setError(null);
         setFormData({ idioma_code: '', nivel: '' });
         setShowForm(true);
     };
@@ -85,16 +90,18 @@ export default function IdiomasSection({ terceroId, onUpdate }: IdiomasSectionPr
     const handleCancel = () => {
         setShowForm(false);
         setEditItem(null);
+        setError(null);
         setFormData({ idioma_code: '', nivel: '' });
     };
 
     const handleSave = async () => {
         if (!formData.idioma_code || !formData.nivel) {
-            alert('Complete todos los campos');
+            setError('Complete todos los campos');
             return;
         }
 
         setSaving(true);
+        setError(null);
         try {
             if (editItem) {
                 await terceroAPI.idiomas.update(terceroId, editItem.id, formData);
@@ -106,22 +113,27 @@ export default function IdiomasSection({ terceroId, onUpdate }: IdiomasSectionPr
             handleCancel();
         } catch (error) {
             console.error('Error saving idioma:', error);
-            alert('Error al guardar el idioma');
+            setError('Error al guardar el idioma');
         } finally {
             setSaving(false);
         }
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm('¿Está seguro de eliminar este idioma?')) return;
+        setConfirmId(id);
+    };
 
+    const confirmDelete = async () => {
+        if (confirmId === null) return;
+        const id = confirmId;
+        setConfirmId(null);
         try {
             await terceroAPI.idiomas.delete(terceroId, id);
             await loadData();
             onUpdate?.();
         } catch (error) {
             console.error('Error deleting idioma:', error);
-            alert('Error al eliminar el idioma');
+            setError('Error al eliminar el idioma');
         }
     };
 
@@ -144,6 +156,17 @@ export default function IdiomasSection({ terceroId, onUpdate }: IdiomasSectionPr
                     </Button>
                 )}
             </div>
+
+            <ConfirmDialog
+                open={confirmId !== null}
+                description="¿Está seguro de eliminar este idioma? Esta acción no se puede deshacer."
+                onConfirm={confirmDelete}
+                onCancel={() => setConfirmId(null)}
+            />
+
+            {error && !showForm && (
+                <AppAlert type="error" description={error} className="mb-4" />
+            )}
 
             {loading ? (
                 <div className="flex justify-center py-8">
@@ -189,6 +212,10 @@ export default function IdiomasSection({ terceroId, onUpdate }: IdiomasSectionPr
                                     <X className="w-4 h-4" />
                                 </Button>
                             </div>
+
+                            {error && (
+                                <AppAlert type="error" description={error} className="mb-4" />
+                            )}
 
                             <div className="space-y-4">
                                 <div>

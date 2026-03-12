@@ -3,6 +3,8 @@ import { GraduationCap, Plus, Pencil, Trash2, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { AppAlert } from '@/components/ui/app-alert';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
     Select,
     SelectContent,
@@ -29,13 +31,11 @@ interface EstudiosSectionProps {
 }
 
 const NIVELES = [
-    { value: 'COLEGIO', label: 'Colegio' },
+    { value: 'BACHILLER', label: 'Bachiller' },
     { value: 'TECNICO', label: 'Técnico' },
-    { value: 'TECNOLOGICO', label: 'Tecnológico' },
+    { value: 'TECNOLOGO', label: 'Tecnólogo' },
     { value: 'PROFESIONAL', label: 'Profesional' },
-    { value: 'ESPECIALIZACION', label: 'Especialización' },
-    { value: 'MAESTRIA', label: 'Maestría' },
-    { value: 'DOCTORADO', label: 'Doctorado' },
+    { value: 'POSGRADO', label: 'Posgrado' }
 ];
 
 export default function EstudiosSection({ terceroId, onUpdate }: EstudiosSectionProps) {
@@ -44,6 +44,8 @@ export default function EstudiosSection({ terceroId, onUpdate }: EstudiosSection
     const [showForm, setShowForm] = useState(false);
     const [editItem, setEditItem] = useState<Estudio | null>(null);
     const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [confirmId, setConfirmId] = useState<number | null>(null);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -84,6 +86,7 @@ export default function EstudiosSection({ terceroId, onUpdate }: EstudiosSection
 
     const handleAdd = () => {
         setEditItem(null);
+        setError(null);
         setFormData({
             nivel: '',
             institucion: '',
@@ -97,6 +100,7 @@ export default function EstudiosSection({ terceroId, onUpdate }: EstudiosSection
     const handleCancel = () => {
         setShowForm(false);
         setEditItem(null);
+        setError(null);
         setFormData({
             nivel: '',
             institucion: '',
@@ -108,38 +112,50 @@ export default function EstudiosSection({ terceroId, onUpdate }: EstudiosSection
 
     const handleSave = async () => {
         if (!formData.nivel || !formData.institucion || !formData.titulo) {
-            alert('Complete los campos obligatorios');
+            setError('Complete los campos obligatorios');
             return;
         }
 
+        const dataToSave = {
+            ...formData,
+            fecha_inicio: formData.fecha_inicio || null,
+            fecha_fin: formData.fecha_fin || null,
+        };
+
         setSaving(true);
+        setError(null);
         try {
             if (editItem) {
-                await terceroAPI.estudios.update(terceroId, editItem.id, formData);
+                await terceroAPI.estudios.update(terceroId, editItem.id, dataToSave);
             } else {
-                await terceroAPI.estudios.create(terceroId, formData);
+                await terceroAPI.estudios.create(terceroId, dataToSave);
             }
             await loadEstudios();
             onUpdate?.();
             handleCancel();
         } catch (error) {
             console.error('Error saving estudio:', error);
-            alert('Error al guardar el estudio');
+            setError('Error al guardar el estudio');
         } finally {
             setSaving(false);
         }
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm('¿Está seguro de eliminar este estudio?')) return;
+        setConfirmId(id);
+    };
 
+    const confirmDelete = async () => {
+        if (confirmId === null) return;
+        const id = confirmId;
+        setConfirmId(null);
         try {
             await terceroAPI.estudios.delete(terceroId, id);
             await loadEstudios();
             onUpdate?.();
         } catch (error) {
             console.error('Error deleting estudio:', error);
-            alert('Error al eliminar el estudio');
+            setError('Error al eliminar el estudio');
         }
     };
 
@@ -157,6 +173,17 @@ export default function EstudiosSection({ terceroId, onUpdate }: EstudiosSection
                     </Button>
                 )}
             </div>
+
+            <ConfirmDialog
+                open={confirmId !== null}
+                description="¿Está seguro de eliminar este estudio? Esta acción no se puede deshacer."
+                onConfirm={confirmDelete}
+                onCancel={() => setConfirmId(null)}
+            />
+
+            {error && !showForm && (
+                <AppAlert type="error" description={error} className="mb-4" />
+            )}
 
             {loading ? (
                 <div className="flex justify-center py-8">
@@ -223,6 +250,10 @@ export default function EstudiosSection({ terceroId, onUpdate }: EstudiosSection
                                     <X className="w-4 h-4" />
                                 </Button>
                             </div>
+
+                            {error && (
+                                <AppAlert type="error" description={error} className="mb-4" />
+                            )}
 
                             <div className="space-y-4">
                                 <div>

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { FileText, Upload, Loader2, CheckCircle2, AlertCircle, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DocumentosRequeridos, DocumentoRequerido } from '@/components/forms/DocumentosRequeridos';
-import { vinculacionAPI } from '@/lib/api';
+import { vinculacionAPI, terceroAPI } from '@/lib/api';
 
 interface DocumentosTabProps {
     terceroId: number;
@@ -18,7 +18,37 @@ export default function DocumentosTab({ terceroId, documentosRequeridos, tipoPer
     const [error, setError] = useState<string>('');
     const [success, setSuccess] = useState(false);
     const [personaChangeMessage, setPersonaChangeMessage] = useState<string>('');
+    const [resetCounter, setResetCounter] = useState(0);
+    const [loadingInitial, setLoadingInitial] = useState(true);
     const previousTipoPersonaRef = useRef<"NATURAL" | "JURIDICA">(tipoPersona);
+
+    // Cargar estado inicial de documentos desde el backend
+    useEffect(() => {
+        const loadDocumentosStatus = async () => {
+            try {
+                const status = await terceroAPI.getStatus(terceroId);
+
+                // Inicializar uploadProgress con documentos ya cargados
+                const initialProgress: Record<string, 'uploading' | 'success' | 'error'> = {};
+
+                if (status.documentos?.items) {
+                    status.documentos.items.forEach((doc: any) => {
+                        if (doc.cargado && doc.estado === 'CARGADO') {
+                            initialProgress[doc.code] = 'success';
+                        }
+                    });
+                }
+
+                setUploadProgress(initialProgress);
+            } catch (err) {
+                console.error('Error al cargar estado de documentos:', err);
+            } finally {
+                setLoadingInitial(false);
+            }
+        };
+
+        loadDocumentosStatus();
+    }, [terceroId]);
 
     // Detectar cambio de tipo_persona y limpiar archivos que ya no aplican
     useEffect(() => {
@@ -83,6 +113,7 @@ export default function DocumentosTab({ terceroId, documentosRequeridos, tipoPer
 
             setSuccess(true);
             setDocumentFiles({});
+            setResetCounter(prev => prev + 1); // Trigger reset en el hijo
             onComplete?.();
         } catch (err: any) {
             setError('Error al cargar algunos documentos. Por favor intente nuevamente.');
@@ -96,6 +127,19 @@ export default function DocumentosTab({ terceroId, documentosRequeridos, tipoPer
     const obligatoriosPendientes = obligatorios.filter(
         doc => !documentFiles[doc.documento_tipo_code] && uploadProgress[doc.documento_tipo_code] !== 'success'
     );
+    const documentosYaCargados = Object.keys(uploadProgress).filter(code => uploadProgress[code] === 'success');
+
+    // Mostrar loader inicial mientras se carga el estado
+    if (loadingInitial) {
+        return (
+            <div className="p-6 flex items-center justify-center min-h-[400px]">
+                <div className="text-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-3" />
+                    <p className="text-sm text-muted-foreground">Cargando estado de documentos...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="p-6">
@@ -134,6 +178,7 @@ export default function DocumentosTab({ terceroId, documentosRequeridos, tipoPer
                         { status: status === 'uploading' ? 'uploading' : status === 'success' ? 'success' : 'error' }
                     ])
                 )}
+                resetTrigger={resetCounter}
             />
 
             {/* Mensajes de estado */}
@@ -160,7 +205,7 @@ export default function DocumentosTab({ terceroId, documentosRequeridos, tipoPer
             )}
 
             {/* Resumen */}
-            <div className="mt-6 p-4 bg-muted/50 rounded-lg">
+            <div className="mt-6 p-4 bg-muted/50 rounded-lg space-y-2">
                 <div className="flex justify-between items-center text-sm">
                     <span className="text-muted-foreground">
                         Documentos seleccionados: <strong>{Object.keys(documentFiles).length}</strong>
@@ -171,6 +216,14 @@ export default function DocumentosTab({ terceroId, documentosRequeridos, tipoPer
                         </span>
                     )}
                 </div>
+                {documentosYaCargados.length > 0 && (
+                    <div className="flex items-center gap-2 text-sm">
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                        <span className="text-green-700 dark:text-green-400">
+                            {documentosYaCargados.length} documento(s) ya cargado(s) anteriormente
+                        </span>
+                    </div>
+                )}
             </div>
 
             {/* Botón de carga */}
@@ -178,7 +231,11 @@ export default function DocumentosTab({ terceroId, documentosRequeridos, tipoPer
                 {Object.keys(documentFiles).length > 0 && !uploading && (
                     <Button
                         variant="outline"
-                        onClick={() => setDocumentFiles({})}
+                        onClick={() => {
+                            setDocumentFiles({});
+                            setUploadProgress({});
+                            setResetCounter(prev => prev + 1); // Trigger reset en el hijo
+                        }}
                     >
                         Limpiar Selección
                     </Button>
