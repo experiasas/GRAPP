@@ -1,8 +1,0 @@
-node_modules
-.venv
-venv
-dist
-build
-__pycache__
-*.log
-coverage
