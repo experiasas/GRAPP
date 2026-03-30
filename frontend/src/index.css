@@ -10,9 +10,9 @@
 
 @layer base {
   :root {
-    /* Background colors */
-    --background: 210 20% 98%;
-    --foreground: 222 47% 11%;
+    /* Background colors — #F5F7FA */
+    --background: 216 33% 97%;
+    --foreground: 221 39% 11%;
 
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
@@ -20,8 +20,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    /* Primary - Azul Experias (profesional, confiable) */
-    --primary: 219 50.8% 12%;
+    /* Primary - Azul Corporativo Experias #24408C */
+    --primary: 224 59% 35%;
     --primary-foreground: 0 0% 100%;
 
     /* Secondary - Gris suave */
@@ -32,36 +32,36 @@
     --muted: 210 20% 96%;
     --muted-foreground: 215 16% 47%;
 
-    /* Accent - Azul claro */
-    --accent: 217 91% 95%;
-    --accent-foreground: 217 91% 40%;
+    /* Accent - tint del azul corporativo */
+    --accent: 224 59% 94%;
+    --accent-foreground: 224 59% 35%;
 
-    /* States */
-    --destructive: 0 84% 60%;
+    /* States — corporate palette */
+    --destructive: 0 72% 51%;       /* #DC2626 */
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 76% 36%;
+    --success: 142 71% 36%;         /* #16A34A */
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 92% 50%;
+    --warning: 38 92% 50%;          /* #F59E0B */
     --warning-foreground: 0 0% 100%;
 
-    --info: 199 89% 48%;
+    --info: 224 59% 35%;            /* brand blue for neutral info */
     --info-foreground: 0 0% 100%;
 
-    /* Border and inputs */
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 217 91% 60%;
+    /* Border and inputs — #E5E7EB */
+    --border: 220 14% 91%;
+    --input: 220 14% 91%;
+    --ring: 224 59% 35%;            /* focus ring = brand blue */
 
     --radius: 0.75rem;
 
-    /* Chart colors - Azules corporativos */
-    --chart-1: 219 50.8% 12%;
-    --chart-2: 217 71% 53%;
-    --chart-3: 215 28% 17%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    /* Chart colors — paleta corporativa */
+    --chart-1: 224 59% 35%;         /* #24408C — brand blue */
+    --chart-2: 229 54% 52%;         /* #3b5bcc — medium blue */
+    --chart-3: 218 51% 12%;         /* #0f1a2e — navy */
+    --chart-4: 38 92% 50%;          /* #F59E0B — warning amber */
+    --chart-5: 142 71% 36%;         /* #16A34A — success green */
   }
 
   * {
@@ -87,23 +87,57 @@
   }
 
   .dark {
-    --background: 222 47% 11%;
-    --foreground: 210 20% 98%;
-    --card: 222 47% 14%;
-    --card-foreground: 210 20% 98%;
-    --popover: 222 47% 14%;
-    --popover-foreground: 210 20% 98%;
-    --primary: 217 91% 60%;
+    /* Experias dark palette — #0F1A2E navy */
+    --background: 218 51% 12%;        /* #0F1A2E */
+    --foreground: 0 0% 100%;          /* #FFFFFF */
+    --card: 220 48% 16%;              /* #1A2A4A */
+    --card-foreground: 0 0% 100%;
+    --popover: 220 48% 16%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 217 91% 65%;           /* azul más claro legible sobre dark */
     --primary-foreground: 0 0% 100%;
-    --secondary: 215 28% 17%;
-    --secondary-foreground: 210 20% 98%;
-    --muted: 215 28% 17%;
-    --muted-foreground: 215 16% 57%;
-    --accent: 217 50% 25%;
-    --accent-foreground: 217 91% 70%;
-    --border: 215 28% 20%;
-    --input: 215 28% 20%;
-    --ring: 217 91% 60%;
+    --secondary: 220 40% 20%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 220 40% 20%;
+    --muted-foreground: 215 16% 65%;
+    --accent: 224 50% 25%;
+    --accent-foreground: 217 91% 75%;
+    --destructive: 0 72% 60%;         /* rojo más claro en dark */
+    --success: 142 71% 48%;           /* verde más claro en dark */
+    --warning: 38 92% 60%;            /* ámbar más claro en dark */
+    --border: 224 40% 22%;            /* azul corporativo sutil */
+    --input: 224 40% 22%;
+    --ring: 217 91% 65%;
+    --chart-1: 217 91% 65%;
+    --chart-2: 229 70% 68%;
+    --chart-3: 215 16% 65%;
+    --chart-4: 38 92% 60%;
+    --chart-5: 142 71% 48%;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not(.light) {
+      --background: 218 51% 12%;
+      --foreground: 0 0% 100%;
+      --card: 220 48% 16%;
+      --card-foreground: 0 0% 100%;
+      --popover: 220 48% 16%;
+      --popover-foreground: 0 0% 100%;
+      --primary: 217 91% 65%;
+      --primary-foreground: 0 0% 100%;
+      --secondary: 220 40% 20%;
+      --secondary-foreground: 0 0% 100%;
+      --muted: 220 40% 20%;
+      --muted-foreground: 215 16% 65%;
+      --accent: 224 50% 25%;
+      --accent-foreground: 217 91% 75%;
+      --destructive: 0 72% 60%;
+      --success: 142 71% 48%;
+      --warning: 38 92% 60%;
+      --border: 224 40% 22%;
+      --input: 224 40% 22%;
+      --ring: 217 91% 65%;
+    }
   }
 }
 

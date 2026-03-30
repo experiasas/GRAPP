@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { API_URL } from "@/api/config";
 import axios from "axios";
@@ -65,26 +65,39 @@ const formatCurrency = (value: number) => {
 
 export default function Dashboard() {
     const { user } = useAuth();
+    const location = useLocation();
     const [cuentas, setCuentas] = useState<CuentaCobro[]>([]);
     const [resumen, setResumen] = useState<Resumen | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [activeTab, setActiveTab] = useState<EstadoFilter>("TODAS");
 
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const res = await axios.get(`${API_URL}/api/cuentas-cobro/mis-cuentas/`);
-                setCuentas(res.data.cuentas || []);
-                setResumen(res.data.resumen || null);
-            } catch (error) {
-                console.error("Error cargando cuentas", error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchData();
+    const fetchData = useCallback(async () => {
+        try {
+            const res = await axios.get(`${API_URL}/api/cuentas-cobro/mis-cuentas/`);
+            setCuentas(res.data.cuentas || []);
+            setResumen(res.data.resumen || null);
+        } catch (error) {
+            console.error("Error cargando cuentas", error);
+        } finally {
+            setIsLoading(false);
+        }
     }, []);
+
+    // Carga inicial y recarga al volver a esta ruta (ej: desde NuevaRadicacion)
+    useEffect(() => {
+        setIsLoading(true);
+        fetchData();
+    }, [location.key, fetchData]);
+
+    // Recarga al recuperar el foco de la pestaña (admin cambió estado externamente)
+    useEffect(() => {
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') fetchData();
+        };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => document.removeEventListener('visibilitychange', onVisible);
+    }, [fetchData]);
 
     // Conteos por estado
     const normalize = (estado: string) => estado.toUpperCase();

@@ -1,7 +1,9 @@
 import axios, { AxiosError } from 'axios';
 
+export const API_BASE_URL = 'http://localhost:8000';
+
 export const apiClient = axios.create({
-    baseURL: 'http://127.0.0.1:8000',
+    baseURL: API_BASE_URL,
     headers: {
         'Content-Type': 'application/json',
     },

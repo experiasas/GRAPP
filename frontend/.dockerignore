@@ -1,0 +1,13 @@
+# Dependencias de Node (se instalan dentro del contenedor)
+node_modules
+
+# Build de produccion (en dev no se necesita)
+dist
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea

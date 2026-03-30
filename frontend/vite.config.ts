@@ -11,6 +11,9 @@ export default defineConfig({
         },
     },
     server: {
+        watch: {
+            usePolling: true,
+        },
         proxy: {
             '/media': {
                 target: 'http://localhost:8000',

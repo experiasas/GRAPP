@@ -15,6 +15,11 @@ import NuevaRadicacion from './pages/portal-terceros/NuevaRadicacion'
 import { AuthProvider } from './context/AuthContext'
 import AdminLayout from './components/layout/AdminLayout'
 import AdminDashboard from './pages/admin/AdminDashboard'
+import TercerosListPage from './pages/admin/TercerosListPage'
+import EmpresasListPage from './pages/admin/EmpresasListPage'
+import ContratosListPage from './pages/admin/ContratosListPage'
+import CuentasCobroListPage from './pages/admin/CuentasCobroListPage'
+import OrdenesCompraListPage from './pages/admin/OrdenesCompraListPage'
 
 createRoot(document.getElementById('root')!).render(
     <StrictMode>
@@ -38,6 +43,11 @@ createRoot(document.getElementById('root')!).render(
                     {/* Admin Panel */}
                     <Route path="/admin-panel" element={<AdminLayout />}>
                         <Route index element={<AdminDashboard />} />
+                        <Route path="terceros" element={<TercerosListPage />} />
+                        <Route path="empresas" element={<EmpresasListPage />} />
+                        <Route path="contratos" element={<ContratosListPage />} />
+                        <Route path="cuentas-cobro" element={<CuentasCobroListPage />} />
+                        <Route path="ordenes-compra" element={<OrdenesCompraListPage />} />
                     </Route>
                 </Routes>
             </AuthProvider>

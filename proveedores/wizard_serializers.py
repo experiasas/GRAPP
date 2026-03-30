@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Q
 from decimal import Decimal
 
-from .models import CuentaCobro, TipoAnexo, CuentaCobroAnexo, InvitacionRadicacion, ConfiguracionRadicacion, ComprobantePago
+from .models import CuentaCobro, TipoAnexo, CuentaCobroAnexo, InvitacionRadicacion, ConfiguracionRadicacion, ComprobantePago, OrdenCompra
 from contratos.models import Contrato
 
 
@@ -116,6 +116,16 @@ class WizardCreateSerializer(serializers.Serializer):
             if existing_borrador:
                 return existing_borrador
 
+            # Liberar cualquier registro atascado con numero='' y estado != BORRADOR.
+            # Esto ocurre cuando un registro fue aprobado/pagado sin que SubmitSerializer
+            # asignara un número (p. ej. ediciones manuales vía admin), causando un
+            # IntegrityError al intentar crear el nuevo borrador.
+            for stuck in CuentaCobro.objects.filter(
+                empresa=empresa, proveedor=proveedor, numero='',
+            ).exclude(estado=CuentaCobro.Estado.BORRADOR):
+                stuck.numero = f"LEGACY-{stuck.id}"
+                stuck.save(update_fields=['numero'])
+
             cuenta = CuentaCobro.objects.create(
                 empresa=empresa,
                 proveedor=proveedor,
@@ -133,12 +143,18 @@ class WizardCreateSerializer(serializers.Serializer):
 class WizardStep1Serializer(serializers.ModelSerializer):
     """
     Serializer para Step 1: Datos Generales.
-    El numero de documento se excluye de la edicion porque se genera
-    automaticamente al momento de la radicacion final.
+    Para FACTURA, el tercero puede ingresar su numero de factura electrónica.
+    Para CUENTA_COBRO, el numero se genera automáticamente al radicar.
     """
+    orden_compra = serializers.PrimaryKeyRelatedField(
+        queryset=OrdenCompra.objects.filter(estado__in=['APROBADA', 'EN_EJECUCION']),
+        required=False,
+        allow_null=True,
+    )
+
     class Meta:
         model = CuentaCobro
-        fields = ['contrato', 'periodo', 'concepto', 'observaciones']
+        fields = ['contrato', 'orden_compra', 'periodo', 'concepto', 'observaciones', 'numero']
 
     def validate(self, data):
         instance = self.instance
@@ -146,6 +162,10 @@ class WizardStep1Serializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "Solo se pueden editar cuentas de cobro en estado BORRADOR."
             )
+        # Si la OC tiene contrato y el usuario no eligió contrato, heredar
+        oc = data.get('orden_compra', getattr(instance, 'orden_compra', None))
+        if oc and oc.contrato_id and not data.get('contrato'):
+            data['contrato'] = oc.contrato
         return data
 
     def update(self, instance, validated_data):
@@ -370,12 +390,14 @@ class WizardRetrieveSerializer(serializers.ModelSerializer):
     empresa_nombre = serializers.SerializerMethodField()
     contrato_numero = serializers.CharField(source='contrato.numero', read_only=True, allow_null=True)
     contrato_detalle = serializers.SerializerMethodField()
+    orden_compra_detalle = serializers.SerializerMethodField()
 
     class Meta:
         model = CuentaCobro
         fields = [
             'id', 'empresa', 'empresa_nombre', 'proveedor', 'proveedor_nombre',
             'contrato', 'contrato_numero', 'contrato_detalle',
+            'orden_compra', 'orden_compra_detalle',
             'tipo_documento',
             'numero', 'periodo', 'concepto', 'observaciones',
             'valor_base', 'iva_porcentaje', 'iva_valor',
@@ -403,6 +425,8 @@ class WizardRetrieveSerializer(serializers.ModelSerializer):
             'contrato': ret.get('contrato'),
             'contrato_numero': ret.get('contrato_numero'),
             'contrato_detalle': ret.get('contrato_detalle'),
+            'orden_compra': ret.get('orden_compra'),
+            'orden_compra_detalle': ret.get('orden_compra_detalle'),
             'created_at': ret['created_at'],
             'updated_at': ret['updated_at'],
             'step1_ok': ret['step1_ok'],
@@ -453,6 +477,21 @@ class WizardRetrieveSerializer(serializers.ModelSerializer):
             'objeto': obj.contrato.objeto if hasattr(obj.contrato, 'objeto') else None,
             'fecha_inicio': obj.contrato.fecha_inicio if hasattr(obj.contrato, 'fecha_inicio') else None,
             'fecha_fin': obj.contrato.fecha_fin if hasattr(obj.contrato, 'fecha_fin') else None,
+        }
+
+    def get_orden_compra_detalle(self, obj):
+        """Retorna detalles de la OC si está asignada."""
+        if not obj.orden_compra_id:
+            return None
+        oc = obj.orden_compra
+        return {
+            'id':                   oc.id,
+            'numero_oc':            oc.numero_oc,
+            'objeto':               oc.objeto,
+            'valor_total':          str(oc.valor_total),
+            'valor_pendiente':      str(oc.valor_pendiente),
+            'porcentaje_ejecutado': oc.porcentaje_ejecutado,
+            'fecha_entrega':        oc.fecha_entrega.isoformat() if oc.fecha_entrega else None,
         }
 
     def get_step1_ok(self, obj):
@@ -521,9 +560,14 @@ class SubmitSerializer(serializers.Serializer):
         tipo_persona = cuenta_cobro.proveedor.tipo_persona if cuenta_cobro.proveedor else 'JURIDICA'
 
         # Validacion Step 1
-        # El numero se asigna automaticamente mas adelante en este mismo metodo.
         if not all([cuenta_cobro.periodo, cuenta_cobro.concepto]):
             errors['step1'] = 'Datos generales incompletos. Periodo y concepto son obligatorios.'
+
+        # Para FACTURA, el numero debe ser ingresado por el tercero
+        if cuenta_cobro.tipo_documento == CuentaCobro.TipoDocumento.FACTURA:
+            numero = cuenta_cobro.numero or ''
+            if not numero or numero.startswith('DRAFT-'):
+                errors['numero'] = 'El número de factura es obligatorio. Ingréselo en el Paso 1.'
 
         # Validacion Step 2
         expected_total = cuenta_cobro.recalcular_total()
@@ -584,26 +628,30 @@ class SubmitSerializer(serializers.Serializer):
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        """Transiciona el estado a RADICADA y asigna el numero consecutivo oficial."""
-        # Generar el consecutivo oficial al momento de radicar.
-        # Se bloquea con select_for_update para evitar duplicados en concurrencia.
-        consecutivo = (
-            CuentaCobro.objects
-            .select_for_update()
-            .filter(
-                empresa=instance.empresa,
-                estado__in=[
-                    CuentaCobro.Estado.RADICADA,
-                    CuentaCobro.Estado.EN_REVISION,
-                    CuentaCobro.Estado.APROBADA,
-                    CuentaCobro.Estado.PAGADA,
-                    CuentaCobro.Estado.RECHAZADA,
-                ]
+        """Transiciona el estado a RADICADA.
+        - CUENTA_COBRO: asigna numero consecutivo oficial auto-generado.
+        - FACTURA: conserva el numero ingresado por el tercero (ya validado).
+        """
+        if instance.tipo_documento == CuentaCobro.TipoDocumento.CUENTA_COBRO:
+            # Generar el consecutivo oficial bloqueando para evitar duplicados.
+            consecutivo = (
+                CuentaCobro.objects
+                .select_for_update()
+                .filter(
+                    empresa=instance.empresa,
+                    tipo_documento=CuentaCobro.TipoDocumento.CUENTA_COBRO,
+                    estado__in=[
+                        CuentaCobro.Estado.RADICADA,
+                        CuentaCobro.Estado.EN_REVISION,
+                        CuentaCobro.Estado.APROBADA,
+                        CuentaCobro.Estado.PAGADA,
+                        CuentaCobro.Estado.RECHAZADA,
+                    ]
+                )
+                .count() + 1
             )
-            .count() + 1
-        )
-        anio_actual = timezone.now().year
-        instance.numero = f"{anio_actual}-{consecutivo:04d}"
+            anio_actual = timezone.now().year
+            instance.numero = f"{anio_actual}-{consecutivo:04d}"
 
         instance.estado = CuentaCobro.Estado.RADICADA
         instance.save()

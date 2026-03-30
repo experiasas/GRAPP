@@ -8,6 +8,12 @@ module.exports = {
     theme: {
     	extend: {
     		colors: {
+    			/* ── Experias corporate palette ── */
+    			brand: {
+    				blue:   '#24408C',   /* primary corporate blue */
+    				navy:   '#0f1a2e',   /* dark navy */
+    				medium: '#3b5bcc',   /* medium accent blue */
+    			},
     			border: 'hsl(var(--border))',
     			input: 'hsl(var(--input))',
     			ring: 'hsl(var(--ring))',

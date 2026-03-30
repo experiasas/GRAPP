@@ -1,0 +1,123 @@
+# Version del formato de docker-compose (la 3.8 es la mas estable y compatible)
+services:
+
+  # ─────────────────────────────────────────────
+  # SERVICIO 1: Base de datos PostgreSQL
+  # No necesita Dockerfile propio porque usamos la imagen oficial directamente
+  # ─────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    # alpine = variante ultraliviana basada en Alpine Linux (~5 MB)
+
+    restart: unless-stopped
+    # El contenedor se reinicia automaticamente si falla,
+    # excepto si lo detuviste tu manualmente.
+
+    environment:
+      # Variables de entorno que la imagen de Postgres usa para inicializarse
+      POSTGRES_DB: grapp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+
+    volumes:
+      # Volumen con nombre: los datos de la base de datos se guardan
+      # en el disco del host, NO dentro del contenedor.
+      # Esto es critico: si el contenedor se elimina, los datos persisten.
+      - postgres_data:/var/lib/postgresql/data
+
+    ports:
+      # Mapeo host:contenedor
+      # Permite conectarte a PostgreSQL desde tu maquina con herramientas
+      # como DBeaver o pgAdmin en localhost:5432
+      - "5432:5432"
+
+    healthcheck:
+      # Docker verifica si Postgres esta listo aceptando conexiones.
+      # El backend espera a que este healthcheck pase antes de arrancar.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d grapp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # SERVICIO 2: Backend Django
+  # ─────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      # context: el directorio que Docker usa como raiz para el build.
+      # Desde aqui es desde donde se interpretan los COPY del Dockerfile.
+      dockerfile: Dockerfile
+
+    restart: unless-stopped
+
+    environment:
+      # Sobreescribimos las variables de entorno para el entorno Docker.
+      # DB_HOST es "db" (el nombre del servicio de arriba), NO "localhost".
+      # Dentro de la red de Docker, los servicios se encuentran por su nombre.
+      DB_ENGINE: postgres
+      DB_NAME: grapp
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: db
+      DB_PORT: 5432
+      DEBUG: "True"
+
+    volumes:
+      # Bind mount: monta tu carpeta local dentro del contenedor.
+      # Esto permite que los cambios que hagas en el codigo se reflejen
+      # de inmediato sin reconstruir la imagen (hot-reload del backend).
+      - .:/app
+      # Volumen anonimo para evitar que el bind mount sobreescriba
+      # los archivos de media generados dentro del contenedor.
+      - media_files:/app/media
+
+    ports:
+      - "8000:8000"
+
+    depends_on:
+      db:
+        # El backend NO arranca hasta que Postgres pase su healthcheck.
+        # Sin esto, Django intentaria conectarse antes de que Postgres este listo.
+        condition: service_healthy
+
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+      # Ejecuta las migraciones de la base de datos automaticamente
+      # al arrancar, luego levanta el servidor.
+
+  # ─────────────────────────────────────────────
+  # SERVICIO 3: Frontend React + Vite
+  # ─────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+
+    restart: unless-stopped
+
+    volumes:
+      # Bind mount para hot-reload: tus cambios en el codigo
+      # se reflejan instantaneamente en el navegador.
+      - ./frontend:/app
+      # Volumen anonimo para proteger los node_modules instalados
+      # dentro del contenedor del bind mount.
+      # Sin esto, el bind mount pisaria la carpeta node_modules
+      # con la de tu maquina (que puede ser incompatible con Linux).
+      - /app/node_modules
+
+    ports:
+      - "5173:5173"
+
+    depends_on:
+      - backend
+
+# ─────────────────────────────────────────────
+# VOLUMENES con nombre
+# Docker los gestiona en su propio espacio en el disco del host.
+# Persisten entre reinicios y eliminaciones de contenedores.
+# ─────────────────────────────────────────────
+volumes:
+  postgres_data:
+  media_files:

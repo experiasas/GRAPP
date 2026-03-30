@@ -23,7 +23,32 @@ from proveedores.views import radicar_cuenta
 
 # API views
 from terceros.api_views import vinculacion_api, upload_documento, bulk_upload_documentos, tercero_status, get_tercero_detail, get_documentos_requeridos_filtrados, activar_cuenta_tercero, auth_me
-from terceros.admin_api import admin_stats, admin_terceros_list, admin_cuentas_list
+from terceros.admin_api import (
+    admin_stats, admin_terceros_list, admin_tercero_detalle,
+    admin_cambiar_estado_tercero, admin_crear_invitacion,
+    admin_cuentas_list, admin_terceros_pendientes, admin_documentos_recientes,
+    admin_descargar_documentos_tercero, admin_historial_descargas_tercero,
+)
+from tenancy.admin_api import (
+    admin_empresas_list, admin_empresa_detalle,
+    admin_empresa_contacto_crear, admin_empresa_contacto_detalle,
+)
+from proveedores.admin_api import (
+    admin_cuentas_cobro_list, admin_cuenta_cobro_detalle, admin_cuenta_cobro_estado,
+)
+from proveedores.admin_oc_api import (
+    admin_ordenes_compra_list, admin_orden_compra_detalle,
+    admin_orden_compra_estado, admin_orden_compra_radicaciones,
+    admin_mis_ordenes_compra_portal,
+)
+from contratos.admin_api import (
+    admin_tipos_contrato_list, admin_tipos_anexo_contrato_list,
+    admin_contratos_list, admin_contrato_detalle, admin_contrato_estado,
+    admin_contrato_polizas, admin_contrato_poliza_detalle,
+    admin_contrato_otrosis, admin_contrato_otrosi_detalle,
+    admin_contrato_formas_pago, admin_contrato_forma_pago_detalle,
+    admin_contrato_anexos, admin_contrato_anexo_detalle,
+)
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
@@ -85,7 +110,47 @@ urlpatterns = [
     # Admin API endpoints
     path('api/admin/stats/', admin_stats, name='admin_stats'),
     path('api/admin/terceros/', admin_terceros_list, name='admin_terceros_list'),
+    path('api/admin/terceros/<int:tercero_id>/detalle/', admin_tercero_detalle, name='admin_tercero_detalle'),
+    path('api/admin/terceros/<int:tercero_id>/estado/', admin_cambiar_estado_tercero, name='admin_cambiar_estado_tercero'),
+    path('api/admin/invitaciones/', admin_crear_invitacion, name='admin_crear_invitacion'),
+    path('api/admin/empresas/', admin_empresas_list, name='admin_empresas_list'),
+    path('api/admin/empresas/<int:empresa_id>/', admin_empresa_detalle, name='admin_empresa_detalle'),
+    path('api/admin/empresas/<int:empresa_id>/contactos/', admin_empresa_contacto_crear, name='admin_empresa_contacto_crear'),
+    path('api/admin/empresas/<int:empresa_id>/contactos/<int:contacto_id>/', admin_empresa_contacto_detalle, name='admin_empresa_contacto_detalle'),
+    # Contratos — catálogos
+    path('api/admin/tipos-contrato/', admin_tipos_contrato_list, name='admin_tipos_contrato_list'),
+    path('api/admin/tipos-anexo-contrato/', admin_tipos_anexo_contrato_list, name='admin_tipos_anexo_contrato_list'),
+
+    # Contratos — CRUD
+    path('api/admin/contratos/', admin_contratos_list, name='admin_contratos_list'),
+    path('api/admin/contratos/<int:contrato_id>/', admin_contrato_detalle, name='admin_contrato_detalle'),
+    path('api/admin/contratos/<int:contrato_id>/estado/', admin_contrato_estado, name='admin_contrato_estado'),
+
+    # Contratos — pólizas
+    path('api/admin/contratos/<int:contrato_id>/polizas/', admin_contrato_polizas, name='admin_contrato_polizas'),
+    path('api/admin/contratos/<int:contrato_id>/polizas/<int:poliza_id>/', admin_contrato_poliza_detalle, name='admin_contrato_poliza_detalle'),
+
+    # Contratos — otrosíes
+    path('api/admin/contratos/<int:contrato_id>/otrosis/', admin_contrato_otrosis, name='admin_contrato_otrosis'),
+    path('api/admin/contratos/<int:contrato_id>/otrosis/<int:otrosi_id>/', admin_contrato_otrosi_detalle, name='admin_contrato_otrosi_detalle'),
+
+    # Contratos — formas de pago
+    path('api/admin/contratos/<int:contrato_id>/formas-pago/', admin_contrato_formas_pago, name='admin_contrato_formas_pago'),
+    path('api/admin/contratos/<int:contrato_id>/formas-pago/<int:forma_id>/', admin_contrato_forma_pago_detalle, name='admin_contrato_forma_pago_detalle'),
+
+    # Contratos — anexos
+    path('api/admin/contratos/<int:contrato_id>/anexos/', admin_contrato_anexos, name='admin_contrato_anexos'),
+    path('api/admin/contratos/<int:contrato_id>/anexos/<int:anexo_id>/', admin_contrato_anexo_detalle, name='admin_contrato_anexo_detalle'),
+
     path('api/admin/cuentas/', admin_cuentas_list, name='admin_cuentas_list'),
+    # Cuentas de cobro — admin completo
+    path('api/admin/cuentas-cobro/', admin_cuentas_cobro_list, name='admin_cuentas_cobro_list'),
+    path('api/admin/cuentas-cobro/<int:cuenta_id>/detalle/', admin_cuenta_cobro_detalle, name='admin_cuenta_cobro_detalle'),
+    path('api/admin/cuentas-cobro/<int:cuenta_id>/estado/', admin_cuenta_cobro_estado, name='admin_cuenta_cobro_estado'),
+    path('api/admin/terceros/<int:tercero_id>/descargar-documentos/', admin_descargar_documentos_tercero, name='admin_descargar_documentos_tercero'),
+    path('api/admin/terceros/<int:tercero_id>/descargas/', admin_historial_descargas_tercero, name='admin_historial_descargas_tercero'),
+    path('api/admin/terceros-pendientes/', admin_terceros_pendientes, name='admin_terceros_pendientes'),
+    path('api/admin/documentos-recientes/', admin_documentos_recientes, name='admin_documentos_recientes'),
 
     # Profile CRUD endpoints - Estudios
     path("api/terceros/<int:tercero_id>/estudios/", 
@@ -134,6 +199,15 @@ urlpatterns = [
     
     # Wizard API endpoints (DRF router)
     path('api/', include(router.urls)),
+
+    # Órdenes de Compra — admin CRUD
+    path('api/admin/ordenes-compra/', admin_ordenes_compra_list, name='admin_ordenes_compra_list'),
+    path('api/admin/ordenes-compra/<int:oc_id>/', admin_orden_compra_detalle, name='admin_orden_compra_detalle'),
+    path('api/admin/ordenes-compra/<int:oc_id>/estado/', admin_orden_compra_estado, name='admin_orden_compra_estado'),
+    path('api/admin/ordenes-compra/<int:oc_id>/radicaciones/', admin_orden_compra_radicaciones, name='admin_orden_compra_radicaciones'),
+
+    # Portal terceros: OCs disponibles
+    path('api/mis-ordenes-compra/', admin_mis_ordenes_compra_portal, name='mis_ordenes_compra'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -64,6 +64,13 @@ export const Step1Form = ({ initialData, contratoDetalle, tipoDocumento = 'CUENT
     }, [initialData, form]);
 
     const onSubmit = async (data: FormValues) => {
+        if (esFactura && !data.numero?.trim()) {
+            form.setError('numero', {
+                type: 'manual',
+                message: 'El número de factura es obligatorio.',
+            });
+            return;
+        }
         try {
             await onSave(data);
         } catch (error: any) {
@@ -128,19 +135,32 @@ export const Step1Form = ({ initialData, contratoDetalle, tipoDocumento = 'CUENT
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <div className="form-group">
                         <Label htmlFor="numero" className="form-label">
-                            {esFactura ? 'Número de Factura' : 'Número de Cuenta de Cobro'}
+                            {esFactura ? (
+                                <>Número de Factura <span className="text-destructive">*</span></>
+                            ) : (
+                                'Número de Cuenta de Cobro'
+                            )}
                         </Label>
                         <Input
                             id="numero"
                             {...form.register('numero')}
-                            readOnly={true}
-                            disabled={true}
-                            placeholder="Se generará automáticamente al radicar"
+                            readOnly={!esFactura || readOnly}
+                            disabled={!esFactura || readOnly}
+                            placeholder={
+                                esFactura
+                                    ? 'Ingrese el número de su factura electrónica'
+                                    : 'Se generará automáticamente al radicar'
+                            }
                             className={cn(
                                 "form-input",
-                                "bg-muted cursor-not-allowed opacity-70"
+                                (!esFactura || readOnly) && "bg-muted cursor-not-allowed opacity-70"
                             )}
                         />
+                        {esFactura && !readOnly && (
+                            <p className="text-[11px] text-muted-foreground mt-1">
+                                Número asignado por la DIAN en su resolución de facturación.
+                            </p>
+                        )}
                         {form.formState.errors.numero && (
                             <p className="text-sm text-destructive mt-1">{form.formState.errors.numero.message}</p>
                         )}

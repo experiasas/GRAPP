@@ -31,6 +31,16 @@ export interface WizardEstado {
         fecha_inicio?: string;
         fecha_fin?: string;
     } | null;
+    orden_compra?: number | null;
+    orden_compra_detalle?: {
+        id: number;
+        numero_oc: string;
+        objeto: string;
+        valor_total: string;
+        valor_pendiente: string;
+        porcentaje_ejecutado: number;
+        fecha_entrega: string | null;
+    } | null;
     datos_generales: {
         contrato: string;
         numero: string;

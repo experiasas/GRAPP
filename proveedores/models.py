@@ -1,10 +1,135 @@
 from django.db import models
 from django.utils.crypto import get_random_string
+from django.conf import settings
+from django.core.exceptions import ValidationError
 
 from django.core.validators import MinValueValidator
 from decimal import Decimal
 from tenancy.models import Empresa
 from terceros.models import Tercero
+
+
+class EstadoOrdenCompra(models.TextChoices):
+    BORRADOR     = 'BORRADOR',     'Borrador'
+    EMITIDA      = 'EMITIDA',      'Emitida'
+    APROBADA     = 'APROBADA',     'Aprobada'
+    EN_EJECUCION = 'EN_EJECUCION', 'En ejecución'
+    CUMPLIDA     = 'CUMPLIDA',     'Cumplida'
+    ANULADA      = 'ANULADA',      'Anulada'
+
+
+class TipoOrdenCompra(models.TextChoices):
+    COMPRA = 'COMPRA', 'Orden de Compra'
+
+
+class OrdenCompra(models.Model):
+    numero_oc = models.CharField(
+        max_length=50, unique=True, blank=True,
+        help_text='Ej: OC-2026-0001. Se auto-genera si se deja vacío.'
+    )
+    tipo = models.CharField(
+        max_length=10,
+        choices=TipoOrdenCompra.choices,
+        default=TipoOrdenCompra.COMPRA
+    )
+    tercero = models.ForeignKey(
+        'terceros.Tercero', on_delete=models.PROTECT,
+        related_name='ordenes_compra',
+    )
+    empresa = models.ForeignKey(
+        'tenancy.Empresa', on_delete=models.PROTECT,
+        related_name='ordenes_compra',
+    )
+    contrato = models.ForeignKey(
+        'contratos.Contrato', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='ordenes_compra',
+    )
+    objeto = models.TextField(help_text='Descripción de los bienes o servicios a adquirir')
+    valor_sin_iva = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    iva = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    valor_total = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    fecha_emision = models.DateField()
+    fecha_entrega = models.DateField(null=True, blank=True)
+    estado = models.CharField(
+        max_length=15,
+        choices=EstadoOrdenCompra.choices,
+        default=EstadoOrdenCompra.BORRADOR
+    )
+    observaciones = models.TextField(blank=True, default='')
+    archivo = models.FileField(
+        upload_to='ordenes_compra/%Y/%m/',
+        null=True, blank=True,
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='ordenes_compra_creadas'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Orden de Compra'
+        verbose_name_plural = 'Órdenes de Compra'
+
+    def __str__(self):
+        return f'{self.numero_oc} — {self.tercero}'
+
+    @property
+    def valor_radicado(self):
+        from django.db.models import Sum
+        total = self.cuentas_cobro.exclude(
+            estado='BORRADOR'
+        ).aggregate(s=Sum('valor_total'))['s']
+        return total or 0
+
+    @property
+    def valor_pendiente(self):
+        return self.valor_total - self.valor_radicado
+
+    @property
+    def porcentaje_ejecutado(self):
+        if self.valor_total == 0:
+            return 0
+        return round((float(self.valor_radicado) / float(self.valor_total)) * 100, 1)
+
+    def save(self, *args, **kwargs):
+        if not self.numero_oc:
+            from django.utils import timezone
+            year = timezone.now().year
+            prefix = f"OC-{year}"
+            last = OrdenCompra.objects.filter(
+                numero_oc__startswith=prefix
+            ).order_by('-numero_oc').first()
+            if last:
+                try:
+                    seq = int(last.numero_oc.split('-')[-1]) + 1
+                except ValueError:
+                    seq = 1
+            else:
+                seq = 1
+            self.numero_oc = f"{prefix}-{seq:04d}"
+        super().save(*args, **kwargs)
+
+
+class ItemOrdenCompra(models.Model):
+    orden_compra = models.ForeignKey(
+        OrdenCompra, on_delete=models.CASCADE,
+        related_name='items'
+    )
+    descripcion = models.CharField(max_length=500)
+    cantidad = models.DecimalField(max_digits=12, decimal_places=2, default=1)
+    valor_unitario = models.DecimalField(max_digits=18, decimal_places=2)
+    valor_total = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ['id']
+        verbose_name = 'Ítem de Orden de Compra'
+
+    def save(self, *args, **kwargs):
+        self.valor_total = self.cantidad * self.valor_unitario
+        super().save(*args, **kwargs)
 
 
 class CuentaCobro(models.Model):
@@ -31,6 +156,13 @@ class CuentaCobro(models.Model):
         on_delete=models.PROTECT,
         related_name="cuentas_cobro",
         null=True, blank=True,
+    )
+
+    orden_compra = models.ForeignKey(
+        'OrdenCompra', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='cuentas_cobro',
+        help_text='Orden de compra contra la que se radica'
     )
 
     # Tipo de documento: inferido desde tipo_persona del tercero
@@ -79,6 +211,36 @@ class CuentaCobro(models.Model):
 
     class Meta:
         unique_together = ("empresa", "proveedor", "numero")
+
+    def clean(self):
+        super().clean()
+
+        # Heredar contrato desde la OC si la OC tiene contrato vinculado
+        if self.orden_compra_id and self.orden_compra.contrato_id and not self.contrato_id:
+            self.contrato = self.orden_compra.contrato
+
+        # Al salir de borrador, debe tener al menos contrato o OC
+        if self.estado != self.Estado.BORRADOR:
+            if not self.contrato_id and not self.orden_compra_id:
+                raise ValidationError(
+                    'La radicación debe estar asociada a un contrato o a una orden de compra.'
+                )
+
+        # El monto no puede exceder el saldo disponible de la OC
+        if self.orden_compra_id and self.valor_total:
+            pendiente = self.orden_compra.valor_pendiente
+            # Al editar, devolver el valor anterior al saldo para no contarse doble
+            if self.pk:
+                anterior = CuentaCobro.objects.filter(pk=self.pk).values_list('valor_total', flat=True).first()
+                if anterior:
+                    pendiente += Decimal(str(anterior))
+            if Decimal(str(self.valor_total)) > pendiente:
+                raise ValidationError({
+                    'valor_total': (
+                        f'El valor excede el saldo disponible de la OC '
+                        f'(${pendiente:,.0f} disponible de ${self.orden_compra.valor_total:,.0f}).'
+                    )
+                })
 
     def recalcular_total(self):
         """Recalcula el valor total sumando todos los componentes."""

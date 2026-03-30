@@ -12,7 +12,8 @@ from .models import (
     DocumentoTipo, DocumentoRequerido, DocumentoTercero,
     Estudio, Curso, Certificacion, ExperienciaLaboral,
     Idioma, TerceroIdioma, SeguridadSocial,
-    SolicitudActualizacionTercero , InvitacionVinculacion
+    SolicitudActualizacionTercero, InvitacionVinculacion,
+    DescargaDocumentosTercero,
 )
 
 def _aplicar_marca_agua(pdf_bytes: bytes, marca_path: Path) -> bytes:
@@ -248,3 +249,11 @@ class TerceroAdmin(admin.ModelAdmin):
         response["Content-Disposition"] = f'attachment; filename="{zip_name}"'
         return response
 
+
+
+@admin.register(DescargaDocumentosTercero)
+class DescargaDocumentosTerceroAdmin(admin.ModelAdmin):
+    list_display = ['tercero', 'usuario', 'motivo', 'fecha', 'cantidad_archivos']
+    readonly_fields = ['tercero', 'usuario', 'motivo', 'fecha', 'cantidad_archivos']
+    list_filter = ['fecha', 'usuario']
+    search_fields = ['tercero__nombre1', 'tercero__razon_social', 'usuario__username', 'motivo']

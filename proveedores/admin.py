@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import CuentaCobro, InvitacionRadicacion, CuentaCobroAnexo, TipoAnexo, ConfiguracionRadicacion, ComprobantePago
+from .models import CuentaCobro, InvitacionRadicacion, CuentaCobroAnexo, TipoAnexo, ConfiguracionRadicacion, ComprobantePago, OrdenCompra, ItemOrdenCompra
 from terceros.models import Tercero
 
 
@@ -76,3 +76,19 @@ class InvitacionRadicacionAdmin(admin.ModelAdmin):
                 .order_by("razon_social", "nombre1", "apellido1")
             )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+class ItemOrdenCompraInline(admin.TabularInline):
+    model = ItemOrdenCompra
+    extra = 1
+    fields = ('descripcion', 'cantidad', 'valor_unitario', 'valor_total')
+    readonly_fields = ('valor_total',)
+
+
+@admin.register(OrdenCompra)
+class OrdenCompraAdmin(admin.ModelAdmin):
+    list_display = ['numero_oc', 'tercero', 'empresa', 'valor_total', 'estado', 'fecha_emision']
+    list_filter = ['estado', 'empresa', 'tipo']
+    search_fields = ['numero_oc', 'objeto', 'tercero__razon_social', 'tercero__nombre1']
+    raw_id_fields = ['tercero', 'empresa', 'contrato', 'created_by']
+    inlines = [ItemOrdenCompraInline]

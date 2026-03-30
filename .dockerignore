@@ -1,0 +1,37 @@
+# Control de versiones
+.git
+.gitignore
+
+# Entorno virtual de Python
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Base de datos local
+db.sqlite3
+
+# Archivos de entorno
+.env
+.env.*
+!.env.example
+
+# Frontend (tiene su propio contenedor)
+frontend/node_modules
+frontend/dist
+
+# Archivos generados / temporales
+*.log
+*.tmp
+media/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea

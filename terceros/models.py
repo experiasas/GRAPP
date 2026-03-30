@@ -6,6 +6,7 @@ import os
 from uuid import uuid4
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.utils.crypto import get_random_string
 
 from tenancy.models import Empresa  
@@ -593,3 +594,22 @@ class TokenActivacionTercero(models.Model):
 
     def __str__(self):
         return f"Token de {self.usuario.email}"
+
+
+# -------------------------
+# 8) Auditoría de descargas
+# -------------------------
+class DescargaDocumentosTercero(models.Model):
+    tercero = models.ForeignKey('Tercero', on_delete=models.CASCADE, related_name='descargas')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    motivo = models.TextField()
+    fecha = models.DateTimeField(auto_now_add=True)
+    cantidad_archivos = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['-fecha']
+        verbose_name = 'Descarga de documentos'
+        verbose_name_plural = 'Descargas de documentos'
+
+    def __str__(self):
+        return f"Descarga de {self.tercero} por {self.usuario} el {self.fecha:%Y-%m-%d}"

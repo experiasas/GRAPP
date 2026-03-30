@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
     Loader2,
@@ -6,6 +6,8 @@ import {
     CheckCircle2,
     Paperclip,
     ArrowLeft,
+    ShoppingCart,
+    FileText,
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { wizardApi } from '@/api/wizardApi';
@@ -39,6 +41,55 @@ export default function NuevaRadicacion() {
 
     // UI State
     const [currentTab, setCurrentTab] = useState("general");
+
+    // OC Selector state
+    interface OCOption {
+        id: number; numero_oc: string; objeto: string;
+        valor_total: string; valor_pendiente: string;
+        porcentaje_ejecutado: number; fecha_entrega: string | null;
+        contrato: { id: number; numero: string } | null;
+    }
+    const [ocOptions,    setOcOptions]    = useState<OCOption[]>([]);
+    const [loadingOCs,   setLoadingOCs]   = useState(false);
+    const [selectedOC,   setSelectedOC]   = useState<OCOption | null>(null);
+    const [savingOC,     setSavingOC]     = useState(false);
+
+    // 0. Cargar OCs disponibles del tercero logueado
+    const fetchOCs = useCallback(async () => {
+        setLoadingOCs(true);
+        try {
+            const { data } = await import('@/lib/api').then(m => m.apiClient.get('/api/mis-ordenes-compra/'));
+            setOcOptions(data);
+        } catch {
+            setOcOptions([]);
+        } finally {
+            setLoadingOCs(false);
+        }
+    }, []);
+
+    useEffect(() => { fetchOCs(); }, [fetchOCs]);
+
+    // Sincronizar selectedOC con el estado del wizard (carga inicial)
+    useEffect(() => {
+        if (estado?.orden_compra_detalle && ocOptions.length > 0) {
+            const match = ocOptions.find(oc => oc.id === estado.orden_compra);
+            if (match) setSelectedOC(match);
+        }
+    }, [estado?.orden_compra, ocOptions]);
+
+    async function handleSelectOC(oc: OCOption | null) {
+        if (!wizardId) return;
+        setSelectedOC(oc);
+        setSavingOC(true);
+        try {
+            await wizardApi.updateStep1(wizardId, { orden_compra: oc?.id ?? null } as any);
+        } catch {
+            // revert on error
+            setSelectedOC(null);
+        } finally {
+            setSavingOC(false);
+        }
+    }
 
     // 1. Initialization: si hay ?id= en la URL, carga esa cuenta; si no, crea/recupera un borrador
     useEffect(() => {
@@ -249,6 +300,96 @@ export default function NuevaRadicacion() {
                                         </a>
                                     </div>
                                 ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* OC Selector */}
+                    {!isReadOnly && (
+                        <div className="bg-white rounded-xl shadow-sm border p-5">
+                            <h2 className="text-[15px] font-bold text-slate-800 mb-1">¿Contra qué desea radicar?</h2>
+                            <p className="text-slate-500 text-[13px] mb-4">
+                                Seleccione la Orden de Compra asignada, o deje en blanco si radica directamente contra un contrato.
+                            </p>
+
+                            {loadingOCs ? (
+                                <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
+                                    <Loader2 size={14} className="animate-spin" /> Cargando órdenes disponibles…
+                                </div>
+                            ) : ocOptions.length === 0 ? (
+                                <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-4 py-3 text-[13px] text-muted-foreground">
+                                    <FileText size={14} />
+                                    No tienes órdenes de compra activas. Puedes radicar directamente contra tu contrato.
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {/* Opción: sin OC */}
+                                    <label className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${!selectedOC ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/30'}`}>
+                                        <input
+                                            type="radio"
+                                            name="oc-select"
+                                            checked={!selectedOC}
+                                            onChange={() => handleSelectOC(null)}
+                                            className="mt-0.5 accent-primary"
+                                        />
+                                        <div>
+                                            <p className="text-[13px] font-semibold text-foreground flex items-center gap-1.5">
+                                                <FileText size={13} /> Sin orden de compra
+                                            </p>
+                                            <p className="text-[12px] text-muted-foreground">Radicación directa contra contrato</p>
+                                        </div>
+                                    </label>
+
+                                    {/* Opciones de OC */}
+                                    {ocOptions.map(oc => {
+                                        const fmtCOP = (v: string) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(parseFloat(v));
+                                        const pct = oc.porcentaje_ejecutado;
+                                        const barColor = pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-400' : 'bg-emerald-500';
+                                        return (
+                                            <label key={oc.id} className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${selectedOC?.id === oc.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/30'}`}>
+                                                <input
+                                                    type="radio"
+                                                    name="oc-select"
+                                                    checked={selectedOC?.id === oc.id}
+                                                    onChange={() => handleSelectOC(oc)}
+                                                    className="mt-0.5 accent-primary"
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-[13px] font-semibold text-foreground flex items-center gap-1.5">
+                                                        <ShoppingCart size={13} />
+                                                        <span className="font-mono">{oc.numero_oc}</span>
+                                                    </p>
+                                                    <p className="text-[12px] text-muted-foreground truncate">{oc.objeto}</p>
+                                                    <div className="mt-2 flex items-center gap-2">
+                                                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                                                            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                                                        </div>
+                                                        <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                                                            Disponible: <strong>{fmtCOP(oc.valor_pendiente)}</strong> de {fmtCOP(oc.valor_total)} ({pct}% ejecutado)
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </label>
+                                        );
+                                    })}
+
+                                    {savingOC && (
+                                        <p className="text-[12px] text-muted-foreground flex items-center gap-1.5">
+                                            <Loader2 size={12} className="animate-spin" /> Guardando selección…
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* OC info (read-only) */}
+                    {isReadOnly && estado?.orden_compra_detalle && (
+                        <div className="flex items-center gap-3 rounded-lg bg-muted/40 px-4 py-3 text-[13px]">
+                            <ShoppingCart size={15} className="text-primary flex-shrink-0" />
+                            <div>
+                                <span className="font-semibold text-primary font-mono">{estado.orden_compra_detalle.numero_oc}</span>
+                                <span className="text-muted-foreground ml-2">{estado.orden_compra_detalle.objeto}</span>
                             </div>
                         </div>
                     )}
