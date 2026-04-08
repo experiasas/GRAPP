@@ -20,6 +20,7 @@ import EmpresasListPage from './pages/admin/EmpresasListPage'
 import ContratosListPage from './pages/admin/ContratosListPage'
 import CuentasCobroListPage from './pages/admin/CuentasCobroListPage'
 import OrdenesCompraListPage from './pages/admin/OrdenesCompraListPage'
+import TiposTerceroPage from './pages/admin/TiposTerceroPage'
 
 createRoot(document.getElementById('root')!).render(
     <StrictMode>
@@ -48,6 +49,7 @@ createRoot(document.getElementById('root')!).render(
                         <Route path="contratos" element={<ContratosListPage />} />
                         <Route path="cuentas-cobro" element={<CuentasCobroListPage />} />
                         <Route path="ordenes-compra" element={<OrdenesCompraListPage />} />
+                        <Route path="tipos-tercero" element={<TiposTerceroPage />} />
                     </Route>
                 </Routes>
             </AuthProvider>

@@ -15,44 +15,52 @@ import zipfile
 from terceros.admin import _aplicar_marca_agua
 
 
-def _estampar_motivo(pdf_bytes: bytes, motivo: str, usuario) -> bytes:
+def _estampar_motivo(pdf_bytes: bytes, motivo: str, usuario, fecha: str) -> bytes:
     """
-    Estampa en la esquina inferior izquierda de cada página del PDF:
-      Descargado por: <nombre>
-      Motivo: <motivo>
-      Fecha: <dd/mm/yyyy HH:MM>
-    Usa reportlab para el overlay y PyPDF2 para el merge.
-    Si falla por cualquier motivo devuelve el PDF original intacto.
+    Estampa el motivo como marca de agua diagonal centrada en cada página.
+    Se aplica DESPUÉS de _aplicar_marca_agua() (logo Experias).
+    - Texto diagonal a 45°, semitransparente, centrado en la página.
+    - Línea de trazabilidad dentro de la misma rotación, debajo del motivo.
     """
     try:
         from reportlab.pdfgen import canvas as rl_canvas
+        from reportlab.lib.colors import Color
         from PyPDF2 import PdfReader, PdfWriter
 
         nombre_usuario = (usuario.get_full_name() or usuario.username) if usuario else '—'
-        fecha_str = datetime.datetime.now().strftime('%d/%m/%Y %H:%M')
-
-        lines = [
-            f'Descargado por: {nombre_usuario}',
-            f'Motivo: {motivo}',
-            f'Fecha: {fecha_str}',
-        ]
 
         doc_reader = PdfReader(io.BytesIO(pdf_bytes))
         writer = PdfWriter()
 
         for page in doc_reader.pages:
-            page_width = float(page.mediabox.width)
+            page_width  = float(page.mediabox.width)
             page_height = float(page.mediabox.height)
 
             overlay_buf = io.BytesIO()
             c = rl_canvas.Canvas(overlay_buf, pagesize=(page_width, page_height))
-            c.setFont('Helvetica', 7)
-            c.setFillColorRGB(0.5, 0.5, 0.5)
 
-            y = 20
-            for line in reversed(lines):
-                c.drawString(20, y, line)
-                y += 9
+            # ── Marca de agua diagonal (solo el motivo) ─────────────────────
+            c.saveState()
+            c.translate(page_width / 2, page_height / 2)
+            c.rotate(45)
+
+            c.setFillColor(Color(0.6, 0.6, 0.6, alpha=0.25))
+            c.setFont('Helvetica-Bold', 72)
+            c.drawCentredString(0, 0, motivo.upper())
+
+            c.restoreState()
+
+            # ── Pie de página — 3 líneas apiladas ──────────────────────────
+            c.setFillColor(Color(0.2, 0.2, 0.2, alpha=0.7))
+            c.setFont('Helvetica', 7)
+
+            margin_x  = 20
+            line_height = 10
+
+            c.drawString(margin_x, 30,                    f"Descargado por: {nombre_usuario}")
+            c.drawString(margin_x, 30 - line_height,      f"Motivo: {motivo}")
+            c.drawString(margin_x, 30 - (line_height * 2), f"Fecha: {fecha}")
+
             c.save()
 
             overlay_buf.seek(0)
@@ -63,6 +71,7 @@ def _estampar_motivo(pdf_bytes: bytes, motivo: str, usuario) -> bytes:
         out = io.BytesIO()
         writer.write(out)
         return out.getvalue()
+
     except Exception:
         return pdf_bytes
 
@@ -724,9 +733,13 @@ def admin_descargar_documentos_tercero(request, tercero_id):
     from .models import Tercero, DocumentoTercero, DescargaDocumentosTercero
     from django.shortcuts import get_object_or_404
 
-    motivo = request.data.get('motivo', '').strip()
+    motivo = request.data.get('motivo', '').strip().upper()
     if not motivo:
         return Response({'error': 'El motivo es requerido'}, status=400)
+    if len(motivo) < 3:
+        return Response({'error': 'Mínimo 3 caracteres'}, status=400)
+    if len(motivo) > 10:
+        return Response({'error': 'El motivo no puede superar 10 caracteres'}, status=400)
 
     t = get_object_or_404(Tercero, pk=tercero_id)
 
@@ -744,6 +757,7 @@ def admin_descargar_documentos_tercero(request, tercero_id):
         return Response({'error': 'Sin documentos'}, status=404)
 
     marca_path = Path(getattr(settings, 'MARCA_AGUA_PATH', Path(settings.BASE_DIR) / 'marca_agua.pdf'))
+    fecha_str  = datetime.datetime.now().strftime('%d/%m/%Y %H:%M')
     buffer = io.BytesIO()
     archivos_incluidos = []
 
@@ -760,8 +774,8 @@ def admin_descargar_documentos_tercero(request, tercero_id):
 
             if ext == '.pdf':
                 if marca_path.exists():
-                    contenido = _aplicar_marca_agua(contenido, marca_path)
-                contenido = _estampar_motivo(contenido, motivo, request.user)
+                    contenido = _aplicar_marca_agua(contenido, marca_path)   # 1. Logo Experias
+                contenido = _estampar_motivo(contenido, motivo, request.user, fecha_str)  # 2. Motivo diagonal
 
             tipo_code = doc.documento_tipo.code if doc.documento_tipo_id else 'doc'
             nombre_zip = f'{tipo_code}_{nombre_original}'
@@ -855,3 +869,132 @@ def admin_terceros_pendientes(request):
             'relativo': timesince(t.created_at, ahora),
         })
     return Response(data)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CRUD Tipos de Tercero
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAdminUser])
+def admin_tipos_tercero(request):
+    from .models import TipoTercero
+    import re
+
+    if request.method == 'GET':
+        qs = TipoTercero.objects.annotate(
+            total_terceros=Count('tercerotipo', distinct=True),
+            total_invitaciones=Count('invitaciones', distinct=True),
+        ).order_by('nombre')
+        return Response([
+            {
+                'id':                 t.id,
+                'code':               t.code,
+                'nombre':             t.nombre,
+                'descripcion':        t.descripcion,
+                'activo':             t.activo,
+                'total_terceros':     t.total_terceros,
+                'total_invitaciones': t.total_invitaciones,
+            }
+            for t in qs
+        ])
+
+    # POST — crear
+    code        = request.data.get('code', '').strip().upper()
+    nombre      = request.data.get('nombre', '').strip()
+    descripcion = request.data.get('descripcion', '').strip()
+    activo      = request.data.get('activo', True)
+    if isinstance(activo, str):
+        activo = activo.lower() not in ('false', '0', '')
+
+    errors = {}
+    if not code:
+        errors['code'] = 'El código es requerido.'
+    elif not re.match(r'^[A-Z][A-Z0-9_]{0,29}$', code):
+        errors['code'] = 'Solo letras mayúsculas, números y guiones bajos.'
+    elif TipoTercero.objects.filter(code=code).exists():
+        errors['code'] = f'Ya existe un tipo con el código "{code}".'
+    if not nombre:
+        errors['nombre'] = 'El nombre es requerido.'
+    elif len(nombre) > 60:
+        errors['nombre'] = 'Máximo 60 caracteres.'
+    if len(descripcion) > 300:
+        errors['descripcion'] = 'Máximo 300 caracteres.'
+    if errors:
+        return Response(errors, status=400)
+
+    t = TipoTercero.objects.create(code=code, nombre=nombre, descripcion=descripcion, activo=activo)
+    return Response({
+        'id': t.id, 'code': t.code, 'nombre': t.nombre,
+        'descripcion': t.descripcion, 'activo': t.activo,
+        'total_terceros': 0, 'total_invitaciones': 0,
+    }, status=201)
+
+
+@api_view(['GET', 'PATCH', 'DELETE'])
+@permission_classes([IsAdminUser])
+def admin_tipo_tercero_detalle(request, tipo_id):
+    from .models import TipoTercero
+    from django.shortcuts import get_object_or_404
+    from django.db.models import Count
+    from django.db.models.deletion import ProtectedError
+    import re
+
+    t = get_object_or_404(TipoTercero, pk=tipo_id)
+
+    if request.method == 'GET':
+        total_terceros     = t.tercerotipo_set.count()
+        total_invitaciones = t.invitaciones.count()
+        return Response({
+            'id':                 t.id,
+            'code':               t.code,
+            'nombre':             t.nombre,
+            'descripcion':        t.descripcion,
+            'activo':             t.activo,
+            'total_terceros':     total_terceros,
+            'total_invitaciones': total_invitaciones,
+        })
+
+    if request.method == 'PATCH':
+        nombre      = request.data.get('nombre', t.nombre).strip()
+        code        = request.data.get('code', t.code).strip().upper()
+        descripcion = request.data.get('descripcion', t.descripcion).strip()
+        activo      = request.data.get('activo', t.activo)
+        if isinstance(activo, str):
+            activo = activo.lower() not in ('false', '0', '')
+
+        errors = {}
+        if not code:
+            errors['code'] = 'El código es requerido.'
+        elif not re.match(r'^[A-Z][A-Z0-9_]{0,29}$', code):
+            errors['code'] = 'Solo letras mayúsculas, números y guiones bajos.'
+        elif TipoTercero.objects.filter(code=code).exclude(pk=tipo_id).exists():
+            errors['code'] = f'Ya existe un tipo con el código "{code}".'
+        if not nombre:
+            errors['nombre'] = 'El nombre es requerido.'
+        elif len(nombre) > 60:
+            errors['nombre'] = 'Máximo 60 caracteres.'
+        if len(descripcion) > 300:
+            errors['descripcion'] = 'Máximo 300 caracteres.'
+        if errors:
+            return Response(errors, status=400)
+
+        t.code        = code
+        t.nombre      = nombre
+        t.descripcion = descripcion
+        t.activo      = activo
+        t.save(update_fields=['code', 'nombre', 'descripcion', 'activo'])
+        return Response({
+            'id': t.id, 'code': t.code, 'nombre': t.nombre,
+            'descripcion': t.descripcion, 'activo': t.activo,
+        })
+
+    # DELETE
+    try:
+        t.delete()
+        return Response(status=204)
+    except ProtectedError:
+        return Response(
+            {'error': 'No se puede eliminar: este tipo está siendo usado por terceros o invitaciones.'},
+            status=409,
+        )

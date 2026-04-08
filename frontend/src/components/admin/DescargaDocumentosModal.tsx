@@ -13,8 +13,8 @@ import { adminTercerosAPI } from "@/lib/adminTercerosApi";
 const schema = z.object({
     motivo: z
         .string()
-        .min(10, "El motivo debe tener al menos 10 caracteres.")
-        .max(300, "El motivo no puede superar los 300 caracteres."),
+        .min(3, "Mínimo 3 caracteres")
+        .max(10, "El motivo no puede superar 10 caracteres — aparecerá como marca de agua en los documentos"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -71,6 +71,8 @@ export function DescargaDocumentosModal({
         }
     }
 
+    const { ref: motiRef, onChange: motiOnChange, ...motiRest } = register("motivo");
+
     if (!open) return null;
 
     return (
@@ -108,14 +110,23 @@ export function DescargaDocumentosModal({
                         <label className="text-[12px] font-medium text-foreground mb-1.5 block">
                             Motivo <span className="text-destructive">*</span>
                         </label>
+                        <p className="text-xs text-muted-foreground mb-1">
+                            Máx. 10 caracteres · Aparecerá como marca de agua diagonal en los documentos.
+                        </p>
                         <textarea
-                            {...register("motivo")}
+                            ref={motiRef}
+                            {...motiRest}
                             rows={4}
-                            placeholder="Ej: Revisión para proceso de contratación, auditoría interna..."
-                            className={`w-full text-[13px] px-3 py-2 rounded-lg border bg-background resize-none focus:outline-none focus:ring-1 focus:ring-ring transition-colors ${
+                            placeholder="Ej: AUDITORIA"
+                            maxLength={10}
+                            className={`w-full text-[13px] px-3 py-2 rounded-lg border bg-background resize-none focus:outline-none focus:ring-1 focus:ring-ring transition-colors uppercase ${
                                 errors.motivo ? "border-destructive" : "border-input"
                             }`}
                             disabled={isSubmitting}
+                            onChange={(e) => {
+                                e.target.value = e.target.value.toUpperCase();
+                                motiOnChange(e);
+                            }}
                         />
                         <div className="flex items-start justify-between mt-1 gap-3">
                             {errors.motivo ? (
@@ -123,8 +134,10 @@ export function DescargaDocumentosModal({
                             ) : (
                                 <span />
                             )}
-                            <p className="text-[11px] text-muted-foreground flex-shrink-0">
-                                {motivo.length}/300
+                            <p className={`text-xs flex-shrink-0 ${
+                                motivo.length >= 10 ? "text-destructive font-medium" : "text-muted-foreground"
+                            }`}>
+                                {motivo.length}/10
                             </p>
                         </div>
 
@@ -151,7 +164,7 @@ export function DescargaDocumentosModal({
                             type="submit"
                             size="sm"
                             className="flex-1"
-                            disabled={isSubmitting || motivo.trim().length < 10}
+                            disabled={isSubmitting || motivo.trim().length < 3}
                         >
                             {isSubmitting ? (
                                 <>

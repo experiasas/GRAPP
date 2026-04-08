@@ -20,7 +20,7 @@ const NAV = [
                 label: "Terceros",
                 subItems: [
                     { to: "/admin-panel/terceros", label: "Terceros" },
-                    { to: "/admin/terceros/tercerotipo/", label: "Tipos de tercero", external: true },
+                    { to: "/admin-panel/tipos-tercero", label: "Tipos de tercero" },
                     { to: "/admin/terceros/documentorequerido/", label: "Documentos requeridos", external: true },
                 ]
             },

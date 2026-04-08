@@ -48,7 +48,18 @@
       "Bash(where py:*)",
       "Bash(docker ps:*)",
       "Bash(cat >> C:/GRAPP/terceros/admin.py << 'EOF'\n\n\n@admin.register\\(DescargaDocumentosTercero\\)\nclass DescargaDocumentosTerceroAdmin\\(admin.ModelAdmin\\):\n    list_display = ['tercero', 'usuario', 'motivo', 'fecha', 'cantidad_archivos']\n    readonly_fields = ['tercero', 'usuario', 'motivo', 'fecha', 'cantidad_archivos']\nEOF)",
-      "Bash(cd C:/GRAPP && docker compose build backend && docker compose up -d backend)"
+      "Bash(cd C:/GRAPP && docker compose build backend && docker compose up -d backend)",
+      "Bash(python manage.py migrate terceros 0010 2>&1)",
+      "Bash(py manage.py migrate terceros 0010 2>&1)",
+      "Bash(cd /c/GRAPP && py manage.py shell -c \"from terceros.admin_api import admin_terceros_list; print\\('ok'\\)\" 2>&1)",
+      "Bash(py manage.py shell -c \"\nfrom django.test import RequestFactory\nfrom django.contrib.auth import get_user_model\nfrom terceros.admin_api import admin_terceros_list\nfrom rest_framework.test import APIRequestFactory\nfactory = APIRequestFactory\\(\\)\nreq = factory.get\\('/api/admin/terceros/'\\)\nUser = get_user_model\\(\\)\nu = User.objects.filter\\(is_staff=True\\).first\\(\\)\nreq.user = u\nresp = admin_terceros_list\\(req\\)\nprint\\(resp.status_code\\)\n\" 2>&1)",
+      "Bash(py manage.py shell -c \"\nfrom django.db import connection\ntables = connection.introspection.table_names\\(\\)\nprint\\([t for t in tables if 'tercero' in t.lower\\(\\)]\\)\n\" 2>&1)",
+      "Bash(py manage.py shell -c \"\nimport traceback\ntry:\n    from terceros.admin_api import admin_terceros_list\n    from proveedores.admin_api import admin_cuentas_cobro_list\n    from contratos.admin_api import admin_contratos_list\n    print\\('all imports ok'\\)\nexcept Exception:\n    traceback.print_exc\\(\\)\n\" 2>&1)",
+      "Bash(python3 manage.py showmigrations terceros 2>&1 || py manage.py showmigrations terceros 2>&1)",
+      "Bash(py manage.py shell -c \"\nfrom terceros.admin_api import admin_tipo_tercero_detalle\nfrom django.test import RequestFactory\nfrom django.contrib.auth import get_user_model\n\nUser = get_user_model\\(\\)\nadmin = User.objects.filter\\(is_staff=True\\).first\\(\\)\nprint\\('admin user:', admin\\)\n\nfactory = RequestFactory\\(\\)\nreq = factory.get\\('/api/admin/tipos-tercero/5/'\\)\nreq.user = admin\n\nimport traceback\ntry:\n    resp = admin_tipo_tercero_detalle\\(req, tipo_id=5\\)\n    print\\('status:', resp.status_code\\)\n    print\\('data:', resp.data\\)\nexcept Exception as e:\n    traceback.print_exc\\(\\)\n\" 2>&1)",
+      "Bash(py manage.py shell -c \"\nfrom django.conf import settings\nprint\\('DEBUG:', settings.DEBUG\\)\nprint\\('MIDDLEWARE:', settings.MIDDLEWARE\\)\n\" 2>&1)",
+      "Bash(py manage.py shell -c \"\nfrom rest_framework.test import APIClient\nfrom django.contrib.auth import get_user_model\n\nUser = get_user_model\\(\\)\nadmin = User.objects.filter\\(is_staff=True\\).first\\(\\)\n\nclient = APIClient\\(\\)\nclient.force_authenticate\\(user=admin\\)\n\nresp = client.get\\('/api/admin/tipos-tercero/5/', SERVER_NAME='localhost'\\)\nimport json\nprint\\('Status:', resp.status_code\\)\ntry:\n    print\\('Data:', json.loads\\(resp.content\\)\\)\nexcept Exception:\n    print\\('Content:', resp.content[:500]\\)\n\" 2>&1)",
+      "Bash(py manage.py shell -c \"\nfrom rest_framework.test import APIClient\nfrom django.contrib.auth import get_user_model\nimport json\n\nUser = get_user_model\\(\\)\nadmin = User.objects.filter\\(is_staff=True\\).first\\(\\)\nclient = APIClient\\(\\)\nclient.force_authenticate\\(user=admin\\)\n\nresp = client.get\\('/api/admin/tipos-tercero/5/', SERVER_NAME='localhost'\\)\nprint\\('Status:', resp.status_code\\)\nprint\\('Data:', json.loads\\(resp.content\\)\\)\n\" 2>&1)"
     ]
   }
 }

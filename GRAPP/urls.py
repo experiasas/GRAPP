@@ -28,6 +28,7 @@ from terceros.admin_api import (
     admin_cambiar_estado_tercero, admin_crear_invitacion,
     admin_cuentas_list, admin_terceros_pendientes, admin_documentos_recientes,
     admin_descargar_documentos_tercero, admin_historial_descargas_tercero,
+    admin_tipos_tercero, admin_tipo_tercero_detalle,
 )
 from tenancy.admin_api import (
     admin_empresas_list, admin_empresa_detalle,
@@ -110,6 +111,8 @@ urlpatterns = [
     # Admin API endpoints
     path('api/admin/stats/', admin_stats, name='admin_stats'),
     path('api/admin/terceros/', admin_terceros_list, name='admin_terceros_list'),
+    path('api/admin/tipos-tercero/', admin_tipos_tercero, name='admin_tipos_tercero'),
+    path('api/admin/tipos-tercero/<int:tipo_id>/', admin_tipo_tercero_detalle, name='admin_tipo_tercero_detalle'),
     path('api/admin/terceros/<int:tercero_id>/detalle/', admin_tercero_detalle, name='admin_tercero_detalle'),
     path('api/admin/terceros/<int:tercero_id>/estado/', admin_cambiar_estado_tercero, name='admin_cambiar_estado_tercero'),
     path('api/admin/invitaciones/', admin_crear_invitacion, name='admin_crear_invitacion'),

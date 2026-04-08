@@ -106,7 +106,7 @@ const BADGE: Record<string, { label: string; cls: string; dot: string }> = {
     APROBADO:    { label: "Aprobado",    cls: "bg-success/10 text-success",         dot: "bg-success" },
     RECHAZADA:   { label: "Rechazada",   cls: "bg-destructive/10 text-destructive", dot: "bg-destructive" },
     RECHAZADO:   { label: "Rechazado",   cls: "bg-destructive/10 text-destructive", dot: "bg-destructive" },
-    EN_REVISION: { label: "En revisión", cls: "bg-primary/10 text-secondary",         dot: "bg-warning" },
+    EN_REVISION: { label: "En revisión", cls: "bg-warning/10 text-warning",         dot: "bg-warning" },
     RADICADA:    { label: "Radicada",    cls: "bg-primary/10 text-primary",         dot: "bg-primary" },
     PENDIENTE:   { label: "Pendiente",   cls: "bg-warning/10 text-warning",         dot: "bg-warning" },
     BORRADOR:    { label: "Borrador",    cls: "bg-muted text-muted-foreground",     dot: "bg-muted-foreground" },
@@ -308,7 +308,7 @@ export default function AdminDashboard() {
                         ) : (
                             <ResponsiveContainer width="100%" height={300}>
                                 <BarChart
-                                    data={stats!.monthly_data}
+                                    data={stats?.monthly_data ?? []}
                                     margin={{ top: 0, right: 12, left: 0, bottom: 12 }}
                                 >
                                     <CartesianGrid
@@ -370,7 +370,7 @@ export default function AdminDashboard() {
                                 Radicaciones recientes
                             </h2>
                             <Link
-                                to="/admin-panel/cuentas"
+                                to="/admin-panel/cuentas-cobro"
                                 className="text-[12px] text-primary font-medium hover:underline flex items-center gap-1"
                             >
                                 Ver todas <ChevronRight size={16} />
@@ -434,7 +434,7 @@ export default function AdminDashboard() {
                                                     </td>
                                                     <td className="px-4 py-3.5">
                                                         <Link
-                                                            to={`/admin-panel/cuentas/${c.id}`}
+                                                            to={`/admin-panel/cuentas-cobro?highlight=${c.id}`}
                                                             className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center justify-center w-7 h-7 rounded-lg border border-border hover:bg-primary hover:border-primary hover:text-primary-foreground text-muted-foreground/70"
                                                         >
                                                             <ArrowUpRight size={16} />
